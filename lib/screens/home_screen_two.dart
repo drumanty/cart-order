@@ -1,5 +1,7 @@
+import 'package:cartorder/screens/product_details_screen.dart';
 import 'package:flutter/material.dart';
 import 'my_products_screen.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class HomeScreenTwo extends StatefulWidget {
   const HomeScreenTwo({super.key});
@@ -10,7 +12,7 @@ class HomeScreenTwo extends StatefulWidget {
 
 class _HomeScreenTwoState extends State<HomeScreenTwo> {
   int _currentBottomIndex = 0;
-  int _bannerIndex = 0;
+  final int _bannerIndex = 0;
   final TextEditingController _searchController = TextEditingController();
 
   final List<Map<String, String>> _categories = [
@@ -92,14 +94,25 @@ class _HomeScreenTwoState extends State<HomeScreenTwo> {
                       ),
                     ),
                     OutlinedButton.icon(
-                      onPressed: () {
-                        // Connected to MyProductsScreen
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const MyProductsScreen(),
-                          ),
+                      onPressed: () async {
+                        final Uri url = Uri.parse(
+                          'https://forms.gle/Kj81xvtAtnQuro9s9',
                         );
+
+                        // Check if the URL can be launched, then open it in an external browser
+                        if (await canLaunchUrl(url)) {
+                          await launchUrl(
+                            url,
+                            mode: LaunchMode
+                                .externalApplication, // Opens in external browser app
+                          );
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Could not open the link'),
+                            ),
+                          );
+                        }
                       },
                       icon: const Icon(
                         Icons.add,
@@ -107,7 +120,7 @@ class _HomeScreenTwoState extends State<HomeScreenTwo> {
                         color: Color(0xFF0052FF),
                       ),
                       label: const Text(
-                        'My Products',
+                        'Add Products',
                         style: TextStyle(
                           fontSize: 12,
                           color: Color(0xFF0052FF),
@@ -528,7 +541,7 @@ class _HomeScreenTwoState extends State<HomeScreenTwo> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => const MyProductsScreen(),
+                        builder: (context) => const ProductDetailsScreen(),
                       ),
                     );
                   },

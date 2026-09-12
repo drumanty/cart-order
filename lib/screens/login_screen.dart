@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'signup_screen.dart';
 import 'home_screen.dart';
+import 'home_screen_two.dart';
+import 'admin_dashboard_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -86,16 +88,21 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     // Graphic Top Right
                     Container(
-                      width: 90,
-                      height: 90,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFEBF2FF),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.shield_outlined,
-                        size: 45,
-                        color: Color(0xFF0052FF),
+                      width: 130,
+                      height: 130,
+                      color: Colors.transparent,
+                      child: Padding(
+                        padding: const EdgeInsets.all(4.0),
+                        child: Image.asset(
+                          'assets/model.png',
+                          fit: BoxFit.contain,
+                          errorBuilder: (context, error, stackTrace) =>
+                              const Icon(
+                                Icons.person,
+                                size: 80,
+                                color: Colors.grey,
+                              ),
+                        ),
                       ),
                     ),
                   ],
@@ -176,23 +183,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 10),
 
-                // Forgot Password Link
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: GestureDetector(
-                    onTap: () {},
-                    child: const Text(
-                      'Forgot Password?',
-                      style: TextStyle(
-                        color: Color(0xFF0052FF),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-
                 // Login Button
                 SizedBox(
                   width: double.infinity,
@@ -218,48 +208,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 24),
 
-                // Divider "or continue with"
-                Row(
-                  children: [
-                    Expanded(child: Divider(color: Colors.grey.shade300)),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: Text(
-                        'or continue with',
-                        style: TextStyle(
-                          color: Colors.grey.shade500,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                    Expanded(child: Divider(color: Colors.grey.shade300)),
-                  ],
-                ),
-                const SizedBox(height: 20),
-
-                // Social Buttons Row
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildSocialButton(
-                        icon: Icons.g_mobiledata_rounded,
-                        label: 'Continue with Google',
-                        onTap: () {},
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildSocialButton(
-                        icon: Icons.apple,
-                        label: 'Continue with Apple',
-                        onTap: () {},
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-
-                // Sign Up Redirect Link
                 Center(
                   child: GestureDetector(
                     onTap: () {
@@ -288,60 +236,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 30),
-
-                // "Why shop with us?" Bottom Card
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF4F8FF),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Why shop with us?',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                                color: Colors.black,
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            _buildFeatureItem(
-                              Icons.verified_outlined,
-                              'Best Quality Products',
-                            ),
-                            const SizedBox(height: 6),
-                            _buildFeatureItem(
-                              Icons.security_outlined,
-                              'Secure Payments',
-                            ),
-                            const SizedBox(height: 6),
-                            _buildFeatureItem(
-                              Icons.local_shipping_outlined,
-                              'Fast & Reliable Delivery',
-                            ),
-                            const SizedBox(height: 6),
-                            _buildFeatureItem(
-                              Icons.autorenew_outlined,
-                              'Easy Returns',
-                            ),
-                          ],
-                        ),
-                      ),
-                      const Icon(
-                        Icons.local_shipping,
-                        size: 60,
-                        color: Color(0xFF0052FF),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
               ],
             ),
           ),

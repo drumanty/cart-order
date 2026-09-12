@@ -25,6 +25,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _shopNameController = TextEditingController();
   final _gstPanController = TextEditingController();
   final _shopAddressController = TextEditingController();
+  final _businessCategoryController = TextEditingController();
 
   bool _isTermsAccepted = true;
   bool _isLoading = false;
@@ -88,6 +89,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
               'mobileNumber': _mobileController.text.trim(),
               'userType': _userType,
               'shopName': _shopNameController.text.trim(),
+              'businessCategory': _businessCategoryController.text.trim(),
               'gstPanNumber': _gstPanController.text.trim(),
               'shopAddress': _shopAddressController.text.trim(),
               'createdAt': FieldValue.serverTimestamp(),
@@ -168,16 +170,21 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             ),
                           ),
                           Container(
-                            width: 80,
-                            height: 80,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFEBF2FF),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.shopping_bag_rounded,
-                              size: 40,
-                              color: Color(0xFF0052FF),
+                            width: 130,
+                            height: 130,
+                            color: Colors.transparent,
+                            child: Padding(
+                              padding: const EdgeInsets.all(4.0),
+                              child: Image.asset(
+                                'assets/model.png',
+                                fit: BoxFit.contain,
+                                errorBuilder: (context, error, stackTrace) =>
+                                    const Icon(
+                                      Icons.person,
+                                      size: 80,
+                                      color: Colors.grey,
+                                    ),
+                              ),
                             ),
                           ),
                         ],
@@ -303,6 +310,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         controller: _shopNameController,
                         hintText: 'Shop Name',
                         icon: Icons.storefront_outlined,
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Business Category
+                      _buildInputField(
+                        controller: _businessCategoryController,
+                        hintText: 'Business Category',
+                        icon: Icons.category_outlined,
                       ),
                       const SizedBox(height: 14),
 
@@ -485,47 +500,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       ),
                       const SizedBox(height: 20),
 
-                      // Divider "or continue with"
-                      Row(
-                        children: [
-                          Expanded(child: Divider(color: Colors.grey.shade300)),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 10),
-                            child: Text(
-                              'or continue with',
-                              style: TextStyle(
-                                color: Colors.grey.shade500,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                          Expanded(child: Divider(color: Colors.grey.shade300)),
-                        ],
-                      ),
-                      const SizedBox(height: 18),
-
-                      // Social Buttons
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildSocialButton(
-                              icon: Icons.g_mobiledata_rounded,
-                              label: 'Continue with Google',
-                              onTap: () {},
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: _buildSocialButton(
-                              icon: Icons.apple,
-                              label: 'Continue with Apple',
-                              onTap: () {},
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-
                       // Login Redirect Link
                       Center(
                         child: Row(
@@ -565,59 +539,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         ),
                       ),
                       const SizedBox(height: 25),
-
-                      // "Why shop with us?" Bottom Banner
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF4F8FF),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Why shop with us?',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 10),
-                                  _buildFeatureItem(
-                                    Icons.verified_outlined,
-                                    'Best Quality Products',
-                                  ),
-                                  const SizedBox(height: 6),
-                                  _buildFeatureItem(
-                                    Icons.security_outlined,
-                                    'Secure Payments',
-                                  ),
-                                  const SizedBox(height: 6),
-                                  _buildFeatureItem(
-                                    Icons.local_shipping_outlined,
-                                    'Fast & Reliable Delivery',
-                                  ),
-                                  const SizedBox(height: 6),
-                                  _buildFeatureItem(
-                                    Icons.autorenew_outlined,
-                                    'Easy Returns',
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const Icon(
-                              Icons.local_shipping,
-                              size: 60,
-                              color: Color(0xFF0052FF),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 20),
                     ],
                   ),
                 ),

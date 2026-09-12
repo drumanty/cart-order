@@ -25,6 +25,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
 
   final String _currentRating = ' 6A';
 
+  final int _productMrp = 400;
+
   final int _sellingPrice = 350;
   final int _moq = 100;
 
@@ -55,6 +57,17 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
       'price': '₹3,500',
       'icon': Icons.toys_outlined,
     },
+    {
+      'title': 'Power Strip 4 Way Surge Protector',
+      'price': '₹550',
+      'icon': Icons.power_outlined,
+    },
+    {
+      'title': 'Power Strip 4 Way Surge Protector',
+      'price': '₹550',
+      'icon': Icons.power_outlined,
+    },
+
     {
       'title': 'Power Strip 4 Way Surge Protector',
       'price': '₹550',
@@ -108,7 +121,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
             child: Text(
               'Minimum Order\namount ₹1,000',
               style: TextStyle(
-                fontSize: 8.5,
+                fontSize: 10.5,
                 fontWeight: FontWeight.w600,
                 color: Color(0xFF0052FF),
               ),
@@ -279,6 +292,12 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
 
                           _buildHighlightRow(
                             icon: Icons.currency_rupee_outlined,
+                            label: 'Product Mrp',
+                            value: '₹$_productMrp',
+                          ),
+
+                          _buildHighlightRow(
+                            icon: Icons.currency_rupee_outlined,
                             label: 'Selling Price',
                             value: '₹$_sellingPrice',
                           ),
@@ -295,6 +314,12 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                             value: _packages,
                           ),
 
+                          _buildHighlightRow(
+                            icon: Icons.production_quantity_limits,
+                            label: 'Minimum Order Quantity',
+                            value: _moq.toString(),
+                            isLongText: true,
+                          ),
                           _buildHighlightRow(
                             icon: Icons.verified_outlined,
                             label: 'Warranty',
@@ -358,7 +383,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                                 Text(
                                   'Shop ID: ELEC12345',
                                   style: TextStyle(
-                                    fontSize: 9,
+                                    fontSize: 12,
                                     color: Colors.grey.shade600,
                                   ),
                                 ),
@@ -366,7 +391,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                                 const SizedBox(height: 4),
 
                                 const Text(
-                                  'Dipak Store',
+                                  'Dipak Marketing',
                                   style: TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.bold,
@@ -388,7 +413,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                                       child: Text(
                                         '456 Power Street,\nTech City, CA 90210',
                                         style: TextStyle(
-                                          fontSize: 9,
+                                          fontSize: 13,
                                           color: Colors.grey.shade600,
                                           height: 1.2,
                                         ),
@@ -562,7 +587,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
 
   Widget _buildMoreProductsAnimation() {
     const double itemHeight = 52.0;
-    const double viewportHeight = 340.0;
+    const double viewportHeight = 380.0;
 
     final int itemCount = _moreProducts.length;
 

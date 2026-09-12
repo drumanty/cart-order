@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'checkout_screen.dart';
+import 'home_screen.dart';
+import 'profile_details_screen.dart';
+import 'estimated_order_screen.dart';
 
 class CartScreen extends StatefulWidget {
   const CartScreen({super.key});
@@ -9,7 +12,8 @@ class CartScreen extends StatefulWidget {
 }
 
 class _CartScreenState extends State<CartScreen> {
-  // Sample cart items matching the provided design
+  int _selectedIndex = 1;
+
   final List<Map<String, dynamic>> _cartItems = [
     {
       'id': '1',
@@ -43,7 +47,6 @@ class _CartScreenState extends State<CartScreen> {
     },
   ];
 
-  final TextEditingController _promoController = TextEditingController();
   final double _freeDeliveryThreshold = 250.0;
 
   bool get _selectAll =>
@@ -63,16 +66,7 @@ class _CartScreenState extends State<CartScreen> {
     return _cartItems.where((item) => item['isSelected']).length;
   }
 
-  double get _totalAmount {
-    if (_subtotal == 0) return 0.0;
-    return _subtotal;
-  }
-
-  @override
-  void dispose() {
-    _promoController.dispose();
-    super.dispose();
-  }
+  double get _totalAmount => _subtotal;
 
   void _removeItem(int index) {
     setState(() {
@@ -84,6 +78,66 @@ class _CartScreenState extends State<CartScreen> {
     setState(() {
       _cartItems.removeWhere((item) => item['isSelected']);
     });
+  }
+
+  void _toggleSelectAll(bool? value) {
+    if (value == null) return;
+    setState(() {
+      for (var item in _cartItems) {
+        item['isSelected'] = value;
+      }
+    });
+  }
+
+  void _onItemTapped(int index) {
+    if (_selectedIndex == index) return;
+
+    setState(() {
+      _selectedIndex = index;
+    });
+
+    switch (index) {
+      case 0:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const HomeScreen()),
+        );
+        break;
+      case 1:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const EstimatedOrdersScreen(),
+          ),
+        );
+        break;
+      case 2:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const ProfileDetailsScreen()),
+        );
+        break;
+    }
+  }
+
+  Widget _buildSummaryRow(String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(fontSize: 13, color: Colors.black87),
+        ),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+            color: Colors.black87,
+          ),
+        ),
+      ],
+    );
   }
 
   @override
@@ -102,7 +156,11 @@ class _CartScreenState extends State<CartScreen> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () {},
+          onPressed: () {
+            if (Navigator.canPop(context)) {
+              Navigator.pop(context);
+            }
+          },
         ),
         title: Text(
           'Your Cart (${_cartItems.length})',
@@ -115,7 +173,7 @@ class _CartScreenState extends State<CartScreen> {
         centerTitle: true,
         actions: [
           IconButton(
-            icon: const Icon(Icons.favorite_border, color: Colors.black),
+            icon: const Icon(Icons.more_vert, color: Colors.black),
             onPressed: () {},
           ),
         ],
@@ -159,7 +217,7 @@ class _CartScreenState extends State<CartScreen> {
                                       const TextSpan(text: 'You are '),
                                       TextSpan(
                                         text:
-                                            '\$${remainingForFreeDelivery.toStringAsFixed(2)}',
+                                            '₹${remainingForFreeDelivery.toStringAsFixed(2)}',
                                         style: const TextStyle(
                                           color: Color(0xFF0052FF),
                                           fontWeight: FontWeight.bold,
@@ -198,7 +256,7 @@ class _CartScreenState extends State<CartScreen> {
                               ),
                               const SizedBox(width: 12),
                               Text(
-                                '\$${_freeDeliveryThreshold.toStringAsFixed(2)}',
+                                '₹${_freeDeliveryThreshold.toStringAsFixed(2)}',
                                 style: const TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w600,
@@ -229,26 +287,20 @@ class _CartScreenState extends State<CartScreen> {
                           ),
                           child: Row(
                             children: [
-                              // Checkbox
-                              const SizedBox(width: 8),
-
-                              // Product Image Box
                               Container(
-                                width: 75,
-                                height: 75,
+                                width: 65,
+                                height: 65,
                                 decoration: BoxDecoration(
                                   color: const Color(0xFFF7F8FA),
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                                 child: Icon(
                                   item['icon'],
-                                  size: 38,
+                                  size: 32,
                                   color: Colors.black87,
                                 ),
                               ),
                               const SizedBox(width: 12),
-
-                              // Item Details
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -256,8 +308,6 @@ class _CartScreenState extends State<CartScreen> {
                                     Row(
                                       mainAxisAlignment:
                                           MainAxisAlignment.spaceBetween,
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
                                       children: [
                                         Expanded(
                                           child: Text(
@@ -294,21 +344,14 @@ class _CartScreenState extends State<CartScreen> {
                                       mainAxisAlignment:
                                           MainAxisAlignment.spaceBetween,
                                       children: [
-                                        // Price
-                                        Row(
-                                          children: [
-                                            Text(
-                                              '\$${(item['price'] as double).toStringAsFixed(2)}',
-                                              style: const TextStyle(
-                                                fontSize: 14,
-                                                fontWeight: FontWeight.bold,
-                                                color: Color(0xFF0052FF),
-                                              ),
-                                            ),
-                                          ],
+                                        Text(
+                                          '₹${(item['price'] as double).toStringAsFixed(2)}',
+                                          style: const TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.bold,
+                                            color: Color(0xFF0052FF),
+                                          ),
                                         ),
-
-                                        // Quantity Control Box
                                         Container(
                                           height: 28,
                                           decoration: BoxDecoration(
@@ -378,35 +421,6 @@ class _CartScreenState extends State<CartScreen> {
                       },
                     ),
 
-                    // Select All and Remove All Row
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        OutlinedButton(
-                          onPressed: _removeAllSelected,
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: Color(0xFFFFD5D5)),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 4,
-                            ),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                          ),
-                          child: const Text(
-                            'Remove All',
-                            style: TextStyle(
-                              color: Colors.red,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
                     const SizedBox(height: 16),
 
                     // Summary Details Box
@@ -421,9 +435,8 @@ class _CartScreenState extends State<CartScreen> {
                         children: [
                           _buildSummaryRow(
                             'Subtotal ($_selectedCount items)',
-                            '\$${_subtotal.toStringAsFixed(2)}',
+                            '₹${_subtotal.toStringAsFixed(2)}',
                           ),
-
                           const Padding(
                             padding: EdgeInsets.symmetric(vertical: 12),
                             child: Divider(height: 1),
@@ -439,7 +452,7 @@ class _CartScreenState extends State<CartScreen> {
                                 ),
                               ),
                               Text(
-                                '\$${_totalAmount.toStringAsFixed(2)}',
+                                '₹${_totalAmount.toStringAsFixed(2)}',
                                 style: const TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
@@ -469,6 +482,7 @@ class _CartScreenState extends State<CartScreen> {
                             color: Color(0xFF2E7D32),
                             size: 16,
                           ),
+                          SizedBox(width: 6),
                         ],
                       ),
                     ),
@@ -477,163 +491,64 @@ class _CartScreenState extends State<CartScreen> {
                     // Checkout Button
                     SizedBox(
                       width: double.infinity,
+                      height: 48,
                       child: ElevatedButton(
-                        onPressed: () {
-                          // Navigate to CheckoutScreen when pressed
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const CheckoutScreen(),
-                            ),
-                          );
-                        },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF0052FF),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          elevation: 0,
                         ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: const [
-                            Text(
-                              'Proceed to Estimate',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            SizedBox(width: 8),
-                            Icon(
-                              Icons.arrow_forward,
-                              color: Colors.white,
-                              size: 18,
-                            ),
-                          ],
+                        onPressed: _selectedCount == 0
+                            ? null
+                            : () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        const CheckoutScreen(),
+                                  ),
+                                );
+                              },
+                        child: Text(
+                          'Checkout ($_selectedCount)',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 12),
                   ],
                 ),
-              ),
-            ),
-
-            // Bottom Navigation Bar
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                border: Border(top: BorderSide(color: Colors.grey.shade200)),
-              ),
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _buildNavItem(Icons.home_outlined, 'Home', false),
-                  _buildNavItem(Icons.grid_view, 'Catalog', false),
-                  _buildNavItem(
-                    Icons.shopping_cart,
-                    'Cart',
-                    true,
-                    badgeCount: _cartItems.length,
-                  ),
-                  _buildNavItem(Icons.assignment_outlined, 'Orders', false),
-                  _buildNavItem(Icons.person_outline, 'Profile', false),
-                ],
               ),
             ),
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildSummaryRow(
-    String label,
-    String value, {
-    bool showInfoIcon = false,
-  }) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Row(
-          children: [
-            Text(
-              label,
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-            ),
-            if (showInfoIcon) ...[
-              const SizedBox(width: 4),
-              Icon(Icons.info_outline, size: 14, color: Colors.grey.shade500),
-            ],
-          ],
-        ),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            color: Colors.black87,
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _selectedIndex,
+        onTap: _onItemTapped,
+        selectedItemColor: const Color(0xFF0052FF),
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home_outlined),
+            activeIcon: Icon(Icons.home),
+            label: 'Home',
           ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildNavItem(
-    IconData icon,
-    String label,
-    bool isSelected, {
-    int badgeCount = 0,
-  }) {
-    final color = isSelected ? const Color(0xFF0052FF) : Colors.grey.shade600;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Icon(icon, color: color, size: 22),
-            if (badgeCount > 0)
-              Positioned(
-                top: -4,
-                right: -6,
-                child: Container(
-                  padding: const EdgeInsets.all(3),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF0052FF),
-                    shape: BoxShape.circle,
-                  ),
-                  constraints: const BoxConstraints(
-                    minWidth: 14,
-                    minHeight: 14,
-                  ),
-                  child: Text(
-                    '$badgeCount',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 8,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              ),
-          ],
-        ),
-        const SizedBox(height: 2),
-        Text(
-          label,
-          style: TextStyle(
-            color: color,
-            fontSize: 10,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          BottomNavigationBarItem(
+            icon: Icon(Icons.shopping_cart_outlined),
+            activeIcon: Icon(Icons.shopping_cart),
+            label: 'Cart',
           ),
-        ),
-      ],
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person_outline),
+            activeIcon: Icon(Icons.person),
+            label: 'Profile',
+          ),
+        ],
+      ),
     );
   }
 }

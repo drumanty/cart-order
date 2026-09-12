@@ -158,7 +158,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                     ),
                                   ),
                                   Text(
-                                    '\$${(item['price'] as double).toStringAsFixed(2)}',
+                                    '\₹${(item['price'] as double).toStringAsFixed(2)}',
                                     style: const TextStyle(
                                       fontSize: 12.5,
                                       fontWeight: FontWeight.bold,
@@ -175,7 +175,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                           ),
 
                           // Calculation Rows
-                          _buildSummaryRow('Subtotal', '\₹38.55'),
+                          _buildSummaryRow('Subtotal', '₹38.55'),
 
                           const Padding(
                             padding: EdgeInsets.symmetric(vertical: 12),
@@ -192,7 +192,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                 ),
                               ),
                               Text(
-                                '\₹45.48',
+                                '₹45.48',
                                 style: TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.bold,
@@ -230,7 +230,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Icon(
-                              Icons.lock_outline,
+                              Icons.receipt_long_rounded,
                               color: Colors.white,
                               size: 16,
                             ),
@@ -257,7 +257,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                           style: TextStyle(fontSize: 10, color: Colors.grey),
                           children: [
                             TextSpan(
-                              text: 'By placing this order, you agree to our\n',
+                              text:
+                                  'By placing this Estimate, you agree to our\n',
                             ),
                             TextSpan(
                               text: 'Terms & Conditions',
