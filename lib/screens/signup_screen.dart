@@ -1,9 +1,7 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/gestures.dart';
+import 'auth_navigation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:image_picker/image_picker.dart';
 import 'login_screen.dart';
 
 class SignUpScreen extends StatefulWidget {
@@ -27,7 +25,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _shopAddressController = TextEditingController();
   final _businessCategoryController = TextEditingController();
 
-  bool _isTermsAccepted = true;
+  bool _isTermsAccepted = false;
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
@@ -35,84 +33,110 @@ class _SignUpScreenState extends State<SignUpScreen> {
   // User Type Selection
   String _userType = 'Buyer'; // Default value
 
-  // Image Upload State
-  File? _selectedImage;
-  final ImagePicker _picker = ImagePicker();
-
-  Future<void> _pickImage() async {
-    final XFile? pickedFile = await _picker.pickImage(
-      source: ImageSource.gallery,
-    );
-    if (pickedFile != null) {
-      setState(() {
-        _selectedImage = File(pickedFile.path);
-      });
+  @override
+  void dispose() {
+    for (final controller in [
+      _firstNameController,
+      _lastNameController,
+      _emailController,
+      _mobileController,
+      _passwordController,
+      _confirmPasswordController,
+      _shopNameController,
+      _gstPanController,
+      _shopAddressController,
+      _businessCategoryController,
+    ]) {
+      controller.dispose();
     }
+    super.dispose();
+  }
+
+  void _pickImage() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Photo uploads will be enabled after image hosting is configured.',
+        ),
+      ),
+    );
   }
 
   Future<void> _handleSignUp() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    if (_passwordController.text != _confirmPasswordController.text) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Passwords do not match')));
-      return;
-    }
-
+    if (_isLoading || !_formKey.currentState!.validate()) return;
     if (!_isTermsAccepted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please accept Terms & Conditions')),
+      showAuthError(
+        context,
+        const FormatException('Please accept the Terms & Conditions.'),
       );
       return;
     }
-
     setState(() => _isLoading = true);
-
     try {
-      UserCredential userCredential = await FirebaseAuth.instance
-          .createUserWithEmailAndPassword(
-            email: _emailController.text.trim(),
-            password: _passwordController.text.trim(),
-          );
-
-      if (userCredential.user != null) {
-        // Here you can upload the image file to Firebase Storage if needed
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(userCredential.user!.uid)
-            .set({
-              'uid': userCredential.user!.uid,
+      final email = _emailController.text.trim();
+      final password = _passwordController.text;
+      UserCredential credential;
+      try {
+        credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
+      } on FirebaseAuthException catch (error) {
+        if (error.code != 'email-already-in-use') rethrow;
+        // Authenticate ownership before recovering a partially created account.
+        credential = await FirebaseAuth.instance.signInWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
+      }
+      final user = credential.user;
+      if (user == null) throw StateError('No authenticated user was returned.');
+      final ref = FirebaseFirestore.instance.collection('users').doc(user.uid);
+      final existing = await ref.get(const GetOptions(source: Source.server));
+      if (!existing.exists) {
+        // Transaction prevents retries from overwriting an existing profile.
+        await FirebaseFirestore.instance.runTransaction((transaction) async {
+          final latest = await transaction.get(ref);
+          if (!latest.exists) {
+            transaction.set(ref, {
+              'uid': user.uid,
               'firstName': _firstNameController.text.trim(),
               'lastName': _lastNameController.text.trim(),
-              'email': _emailController.text.trim(),
+              'email': user.email ?? email,
               'mobileNumber': _mobileController.text.trim(),
               'userType': _userType,
               'shopName': _shopNameController.text.trim(),
               'businessCategory': _businessCategoryController.text.trim(),
               'gstPanNumber': _gstPanController.text.trim(),
               'shopAddress': _shopAddressController.text.trim(),
+              'photoUrl': null,
+              'photoPath': null,
+              'accountStatus': 'pending',
+              'termsAccepted': true,
+              'termsAcceptedAt': FieldValue.serverTimestamp(),
               'createdAt': FieldValue.serverTimestamp(),
             });
+          }
+        });
       }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Account created successfully!'),
-            backgroundColor: Colors.green,
+      if (!mounted) return;
+      await FirebaseAuth.instance.signOut();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            existing.exists
+                ? 'Account already exists. Please log in; admin approval is required.'
+                : 'Account submitted. Please wait for admin approval before logging in.',
           ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+        ),
+      );
+      Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (_) => false,
+      );
+    } catch (error) {
+      if (mounted) showAuthError(context, error);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -135,7 +159,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       const SizedBox(height: 10),
                       IconButton(
                         icon: const Icon(Icons.arrow_back, color: Colors.black),
-                        onPressed: () {},
+                        onPressed: () => Navigator.maybePop(context),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
                       ),
@@ -200,16 +224,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
                               CircleAvatar(
                                 radius: 42,
                                 backgroundColor: const Color(0xFFEBF2FF),
-                                backgroundImage: _selectedImage != null
-                                    ? FileImage(_selectedImage!)
-                                    : null,
-                                child: _selectedImage == null
-                                    ? const Icon(
-                                        Icons.add_a_photo_outlined,
-                                        size: 32,
-                                        color: Color(0xFF0052FF),
-                                      )
-                                    : null,
+                                child: const Icon(
+                                  Icons.add_a_photo_outlined,
+                                  size: 32,
+                                  color: Color(0xFF0052FF),
+                                ),
                               ),
                               Positioned(
                                 bottom: 0,
@@ -357,7 +376,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           controller: _mobileController,
                           keyboardType: TextInputType.phone,
                           validator: (v) =>
-                              v == null || v.isEmpty ? 'Required' : null,
+                              v == null ||
+                                  !RegExp(r'^[6-9][0-9]{9}$').hasMatch(v.trim())
+                              ? 'Enter a valid 10-digit Indian mobile number'
+                              : null,
                           decoration: InputDecoration(
                             hintText: 'Mobile Number',
                             hintStyle: TextStyle(
@@ -566,7 +588,20 @@ class _SignUpScreenState extends State<SignUpScreen> {
         controller: controller,
         keyboardType: keyboardType,
         obscureText: obscureText,
-        validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+        validator: (v) {
+          final value = v ?? '';
+          if (value.trim().isEmpty) return 'Required';
+          if (controller == _emailController &&
+              !RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(value.trim())) {
+            return 'Enter a valid email address';
+          }
+          if (controller == _passwordController && value.length < 6)
+            return 'Use at least 6 characters';
+          if (controller == _confirmPasswordController &&
+              value != _passwordController.text)
+            return 'Passwords do not match';
+          return null;
+        },
         decoration: InputDecoration(
           hintText: hintText,
           hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),

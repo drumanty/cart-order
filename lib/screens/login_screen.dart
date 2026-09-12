@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'signup_screen.dart';
-import 'home_screen.dart';
-import 'home_screen_two.dart';
-import 'admin_dashboard_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'auth_navigation.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -18,6 +17,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
 
   bool _obscurePassword = true;
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -26,13 +26,34 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _handleLogin() {
-    if (_formKey.currentState!.validate()) {
-      // Navigate to HomeScreen and replace LoginScreen in stack
+  Future<void> _handleLogin() async {
+    if (_isLoading || !_formKey.currentState!.validate()) return;
+    setState(() => _isLoading = true);
+    try {
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: _identifierController.text.trim(),
+        password: _passwordController.text,
+      );
+      if (!mounted) return;
+      await openRoleHome(context);
+    } on MissingUserProfile {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Your account exists but the profile is incomplete. '
+            'Complete signup with the same email and password.',
+          ),
+        ),
+      );
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const HomeScreen()),
+        MaterialPageRoute(builder: (_) => const SignUpScreen()),
       );
+    } catch (error) {
+      if (mounted) showAuthError(context, error);
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -52,7 +73,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 // Back Button
                 IconButton(
                   icon: const Icon(Icons.arrow_back, color: Colors.black),
-                  onPressed: () {},
+                  onPressed: () => Navigator.maybePop(context),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                 ),
@@ -109,7 +130,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 30),
 
-                // Email Address / Mobile Number Input
+                // Email Address Input
                 Container(
                   decoration: BoxDecoration(
                     color: Colors.white,
@@ -119,10 +140,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: TextFormField(
                     controller: _identifierController,
                     validator: (v) => v == null || v.isEmpty
-                        ? 'Please enter email or mobile'
+                        ? 'Please enter your email'
                         : null,
                     decoration: InputDecoration(
-                      hintText: 'Email Address / Mobile Number',
+                      hintText: 'Email Address',
                       hintStyle: TextStyle(
                         color: Colors.grey.shade400,
                         fontSize: 14,
@@ -188,7 +209,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   width: double.infinity,
                   height: 50,
                   child: ElevatedButton(
-                    onPressed: _handleLogin,
+                    onPressed: _isLoading ? null : _handleLogin,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF0052FF),
                       elevation: 0,
@@ -196,8 +217,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: const Text(
-                      'Login',
+                    child: Text(
+                      _isLoading ? 'Signing in...' : 'Login',
                       style: TextStyle(
                         fontSize: 16,
                         color: Colors.white,
@@ -210,14 +231,16 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 Center(
                   child: GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const SignUpScreen(),
-                        ),
-                      );
-                    },
+                    onTap: _isLoading
+                        ? null
+                        : () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const SignUpScreen(),
+                              ),
+                            );
+                          },
                     child: RichText(
                       text: const TextSpan(
                         text: "Don't have an account? ",
