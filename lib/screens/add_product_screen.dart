@@ -1,3 +1,6 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'catalog_support.dart';
 import 'package:flutter/material.dart';
 
 class AddProductScreen extends StatefulWidget {
@@ -24,6 +27,13 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final _descController = TextEditingController();
 
   late String _selectedCategory;
+  String? _sellerId;
+  bool _saving = false;
+  final _sellerStream = FirebaseFirestore.instance
+      .collection('users')
+      .where('userType', isEqualTo: 'Seller')
+      .snapshots();
+  List<String> get _categoryOptions => widget.categories.toSet().toList();
 
   @override
   void initState() {
@@ -48,34 +58,149 @@ class _AddProductScreenState extends State<AddProductScreen> {
     super.dispose();
   }
 
-  void _submitProduct() {
-    if (_formKey.currentState!.validate()) {
-      final newProduct = {
-        'id':
-            'PRD-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
+  Future<void> _submitProduct() async {
+    if (_saving || !_formKey.currentState!.validate()) return;
+    if (_sellerId == null) return;
+    final prices = [
+      _sellingPriceController,
+      _mrpController,
+      _unitPriceController,
+      _mrpUnitPriceController,
+    ];
+    final numbers = <double>[];
+    for (final controller in prices) {
+      final value = controller.text.trim().isEmpty
+          ? 0.0
+          : double.tryParse(controller.text.trim());
+      if (value == null || !value.isFinite || value < 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Enter valid non-negative prices, using digits and a decimal point.',
+            ),
+          ),
+        );
+        return;
+      }
+      numbers.add(value);
+    }
+    final moq = int.tryParse(_minOrderController.text.trim());
+    final quantity = int.tryParse(_howManyInUnitController.text.trim());
+    if (moq == null || moq < 1 || quantity == null || quantity < 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Minimum quantity and quantity in a unit must be positive whole numbers.',
+          ),
+        ),
+      );
+      return;
+    }
+    if (numbers[1] < numbers[0] || numbers[3] < numbers[2]) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'MRP must be at least the corresponding selling/unit price.',
+          ),
+        ),
+      );
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw StateError('Signed out');
+      final seller = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_sellerId)
+          .get();
+      final profile = seller.data();
+      if (profile == null ||
+          profile['userType'] != 'Seller' ||
+          profile['accountStatus'] != 'approved') {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Choose an approved seller.')),
+          );
+        }
+        return;
+      }
+      final doc = FirebaseFirestore.instance.collection('products').doc();
+      await doc.set({
         'productName': _nameController.text.trim(),
         'category': _selectedCategory,
-        'unitPrice': '₹ ${_unitPriceController.text.trim()}',
-        'mrp': '₹ ${_mrpController.text.trim()}',
-        'sellingPrice': '₹ ${_sellingPriceController.text.trim()}',
-        'mrpUnitPrice': '₹ ${_mrpUnitPriceController.text.trim()}',
-        'minOrderAmount': '₹ ${_minOrderController.text.trim()}',
-        'howManyProductsInUnit': _howManyInUnitController.text.trim(),
+        'sellerId': seller.id,
+        'sellerName':
+            '${profile['firstName'] ?? ''} ${profile['lastName'] ?? ''}'.trim(),
+        'sellerShopName': (profile['shopName'] ?? '').toString(),
+        'sellerShopAddress': (profile['shopAddress'] ?? '').toString(),
+        'sellingPrice': numbers[0],
+        'mrp': numbers[1],
+        'unitPrice': numbers[2],
+        'mrpUnitPrice': numbers[3],
+        'minOrderQuantity': moq,
+        'howManyProductsInUnit': quantity,
         'unitTypes': _unitTypeController.text.trim(),
-        'ratings': 5.0,
-        'warranty': _warrantyController.text.trim().isEmpty
-            ? '12 Months Warranty'
-            : _warrantyController.text.trim(),
+        'warranty': _warrantyController.text.trim(),
         'description': _descController.text.trim(),
-        'frontImage': 'https://picsum.photos/id/100/300/300',
-        'backImage': 'https://picsum.photos/id/101/300/300',
-        'sideImage': 'https://picsum.photos/id/102/300/300',
+        'frontImage': '',
+        'backImage': '',
+        'sideImage': '',
+        'ratings': 0,
+        'reviewCount': 0,
         'status': 'Approved',
-      };
-
-      Navigator.pop(context, newProduct);
+        'isActive': true,
+        'inStock': true,
+        'stockStatus': 'In Stock',
+        'createdBy': user.uid,
+        'updatedBy': user.uid,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      if (mounted) Navigator.pop(context, true);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(catalogError(error))));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
+
+  Widget _sellerField() => StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+    stream: _sellerStream,
+    builder: (context, snapshot) {
+      if (snapshot.hasError) return Text(catalogError(snapshot.error!));
+      if (!snapshot.hasData) return const LinearProgressIndicator();
+      final sellers = snapshot.data!.docs
+          .where((d) => d.data()['accountStatus'] == 'approved')
+          .toList();
+      if (sellers.isEmpty) {
+        return const Text('Approve a Seller account before adding products.');
+      }
+      final selected = sellers.any((d) => d.id == _sellerId) ? _sellerId : null;
+      return DropdownButtonFormField<String>(
+        initialValue: selected,
+        isExpanded: true,
+        decoration: _inputDecoration('Assign Seller'),
+        items: sellers
+            .map(
+              (d) => DropdownMenuItem(
+                value: d.id,
+                child: Text(
+                  '${d.data()['shopName'] ?? ''} — ${d.data()['firstName'] ?? ''} (${d.data()['email'] ?? ''})',
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            )
+            .toList(),
+        onChanged: _saving ? null : (v) => setState(() => _sellerId = v),
+        validator: (v) => v == null ? 'Select an approved seller' : null,
+      );
+    },
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -111,6 +236,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
               ),
               const SizedBox(height: 20),
 
+              _sellerField(),
+              const SizedBox(height: 16),
               // Basic Details
               const Text(
                 'Basic Information',
@@ -128,9 +255,12 @@ class _AddProductScreenState extends State<AddProductScreen> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: _selectedCategory,
+                initialValue: _categoryOptions.contains(_selectedCategory)
+                    ? _selectedCategory
+                    : null,
+                validator: (v) => v == null ? 'Add a category first' : null,
                 decoration: _inputDecoration('Category'),
-                items: widget.categories
+                items: _categoryOptions
                     .map((c) => DropdownMenuItem(value: c, child: Text(c)))
                     .toList(),
                 onChanged: (val) {
@@ -212,7 +342,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                       controller: _minOrderController,
                       decoration: _inputDecoration(
                         'Min Order Quantity ',
-                        hint: '50 Units',
+                        hint: '50',
                       ),
                     ),
                   ),
@@ -220,10 +350,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   Expanded(
                     child: TextFormField(
                       controller: _howManyInUnitController,
-                      decoration: _inputDecoration(
-                        'Qty in Unit',
-                        hint: '10 Rolls',
-                      ),
+                      decoration: _inputDecoration('Qty in Unit', hint: '10'),
                     ),
                   ),
                 ],
@@ -275,9 +402,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),
-                  onPressed: _submitProduct,
-                  child: const Text(
-                    'Save Product',
+                  onPressed: _saving ? null : _submitProduct,
+                  child: Text(
+                    _saving ? 'Saving...' : 'Save Product',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                 ),

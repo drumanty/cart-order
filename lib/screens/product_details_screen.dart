@@ -1,99 +1,233 @@
+import 'dart:async';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'shop_settings.dart';
 import 'package:flutter/material.dart';
-import 'cart_screen.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'catalog_support.dart';
 
 class ProductDetailsScreen extends StatefulWidget {
-  const ProductDetailsScreen({super.key});
+  final String? productId;
+  const ProductDetailsScreen({super.key, this.productId});
 
   @override
   State<ProductDetailsScreen> createState() => _ProductDetailsScreenState();
 }
 
 class _ProductDetailsScreenState extends State<ProductDetailsScreen>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, CatalogState<ProductDetailsScreen> {
   int _selectedImageIndex = 0;
+  bool _sendingSample = false;
+  bool _sampleSent = false;
+  Future<void> _requestSample() async {
+    if (!_canUseBuyerActions || _sendingSample || _sampleSent) return;
+    setState(() => _sendingSample = true);
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      final productId = widget.productId;
+      if (user == null || productId == null)
+        throw StateError('Please sign in as a Buyer.');
+      final profile = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+      final buyer = profile.data() ?? <String, dynamic>{};
+      if (buyer['userType'] != 'Buyer' || buyer['accountStatus'] != 'approved')
+        throw StateError('Only approved Buyers can request samples.');
+      final product = await FirebaseFirestore.instance
+          .collection('products')
+          .doc(productId)
+          .get();
+      final p = product.data();
+      if (p == null || p['isActive'] != true || p['status'] != 'Approved')
+        throw StateError('This product is no longer available.');
+      await FirebaseFirestore.instance.collection('sample_requests').add({
+        'buyerId': user.uid,
+        'userName': '${buyer['firstName'] ?? ''} ${buyer['lastName'] ?? ''}'
+            .trim(),
+        'userMobile': (buyer['mobileNumber'] ?? '').toString(),
+        'buyerEmail': user.email ?? '',
+        'buyerAddress': (buyer['shopAddress'] ?? '').toString(),
+        'shopName': (buyer['shopName'] ?? '').toString(),
+        'productID': productId,
+        'productName': (p['productName'] ?? '').toString(),
+        'sellerId': (p['sellerId'] ?? '').toString(),
+        'sellerShopName': (p['sellerShopName'] ?? '').toString(),
+        'sampleImageUrl': (p['frontImage'] ?? '').toString(),
+        'status': 'Pending',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      if (!mounted) return;
+      setState(() => _sampleSent = true);
+      await showDialog<void>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: const Text('Sample request submitted'),
+          content: const Text(
+            'Your sample request has been sent to our support team.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e is StateError
+                  ? e.message.toString()
+                  : 'Could not save sample request. Please check your connection and access permissions.',
+            ),
+          ),
+        );
+    } finally {
+      if (mounted) setState(() => _sendingSample = false);
+    }
+  }
+
+  StreamSubscription<User?>? _authSubscription;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _roleSubscription;
+  String? _roleUid;
+  String? _userRole;
+  bool _approvedBuyer = false;
+  bool _roleLoading = true;
+  bool _roleFailed = false;
+  bool get _canUseBuyerActions =>
+      _approvedBuyer &&
+      _roleUid != null &&
+      FirebaseAuth.instance.currentUser?.uid == _roleUid;
+
+  void _watchUserRole() {
+    _authSubscription = FirebaseAuth.instance.authStateChanges().listen(
+      (user) {
+        _roleSubscription?.cancel();
+        if (!mounted) return;
+        setState(() {
+          _roleUid = user?.uid;
+          _userRole = null;
+          _approvedBuyer = false;
+          _roleLoading = user != null;
+          _roleFailed = false;
+        });
+        if (user == null) return;
+        final uid = user.uid;
+        _roleSubscription = FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .snapshots()
+            .listen(
+              (doc) {
+                if (!mounted || _roleUid != uid) return;
+                final data = doc.data();
+                setState(() {
+                  _userRole = data?['userType']?.toString();
+                  _approvedBuyer =
+                      _userRole == 'Buyer' &&
+                      data?['accountStatus'] == 'approved';
+                  _roleLoading = false;
+                  _roleFailed = !doc.exists;
+                });
+              },
+              onError: (Object error) {
+                if (!mounted || _roleUid != uid) return;
+                setState(() {
+                  _approvedBuyer = false;
+                  _roleLoading = false;
+                  _roleFailed = true;
+                });
+              },
+            );
+      },
+      onError: (Object error) {
+        if (!mounted) return;
+        setState(() {
+          _approvedBuyer = false;
+          _roleLoading = false;
+          _roleFailed = true;
+        });
+      },
+    );
+  }
+
+  String get _buyerActionMessage {
+    if (_roleLoading) return 'Checking account permissions…';
+    if (_roleFailed) return 'Unable to verify account permissions.';
+    if (_userRole == 'Buyer') return 'An approved Buyer account is required.';
+    return 'This function is only for buyers.';
+  }
 
   // Animation controllers
   AnimationController? _blinkingController;
   AnimationController? _moreProductsController;
 
-  // Product Highlights Data
-  final String _packages = '5kg';
-
-  final String _material = 'High-quality,durable and long lasting capacity.';
-
-  final String _warranty = '2 Years Manufacturer Warranty';
-
-  final String _currentRating = ' 6A';
-
-  final int _productMrp = 400;
-
-  final int _sellingPrice = 350;
-  final int _moq = 100;
-
-  // More Products
-  final List<Map<String, dynamic>> _moreProducts = [
-    {
-      'title': 'LED Bulb 12W Super Bright White',
-      'price': '₹220',
-      'icon': Icons.lightbulb_outline,
-    },
-    {
-      'title': 'MCB 1P 32A Circuit Breaker',
-      'price': '₹290',
-      'icon': Icons.toggle_on_outlined,
-    },
-    {
-      'title': 'Copper Wire 2.5mm Heavy Duty',
-      'price': '₹2,250',
-      'icon': Icons.donut_large_outlined,
-    },
-    {
-      'title': '1 Gang Switch Panel',
-      'price': '₹95',
-      'icon': Icons.crop_square_outlined,
-    },
-    {
-      'title': 'Ceiling Fan 56" High Speed',
-      'price': '₹3,500',
-      'icon': Icons.toys_outlined,
-    },
-    {
-      'title': 'Power Strip 4 Way Surge Protector',
-      'price': '₹550',
-      'icon': Icons.power_outlined,
-    },
-    {
-      'title': 'Power Strip 4 Way Surge Protector',
-      'price': '₹550',
-      'icon': Icons.power_outlined,
-    },
-
-    {
-      'title': 'Power Strip 4 Way Surge Protector',
-      'price': '₹550',
-      'icon': Icons.power_outlined,
-    },
-  ];
+  Map<String, dynamic> _product = {};
+  late final Stream<DocumentSnapshot<Map<String, dynamic>>>? _detailsStream;
+  String get _packages => _product['howManyProductsInUnit'] ?? '';
+  String get _material => _product['description'] ?? '';
+  String get _warranty => (_product['warranty'] ?? '').isEmpty
+      ? 'Not specified'
+      : _product['warranty'];
+  String get _currentRating => _product['unitTypes'] ?? '';
+  String get _productMrp => _product['mrp'] ?? '';
+  String get _sellingPrice => _product['sellingPrice'] ?? '';
+  String get _moq => _product['minOrderQuantity'] ?? '';
+  List<String> get _images => [
+    'frontImage',
+    'backImage',
+    'sideImage',
+  ].map((k) => (_product[k] ?? '').toString()).toList();
+  List<Map<String, dynamic>> get _moreProducts => catalogProducts
+      .where(
+        (p) =>
+            (_product['sellerId'] ?? '').toString().isNotEmpty &&
+            p['sellerId'] == _product['sellerId'] &&
+            p['id'] != widget.productId &&
+            p['isActive'] == true &&
+            p['status'] == 'Approved',
+      )
+      .take(20)
+      .map(
+        (p) => {
+          ...p,
+          'title': p['productName'],
+          'price': p['sellingPrice'],
+          'icon': Icons.inventory_2_outlined,
+        },
+      )
+      .toList();
 
   @override
   void initState() {
     super.initState();
+    _watchUserRole();
+    _detailsStream = widget.productId == null || widget.productId!.isEmpty
+        ? null
+        : FirebaseFirestore.instance
+              .collection('products')
+              .doc(widget.productId)
+              .snapshots();
 
     // Minimum order badge blinking animation
     _blinkingController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 800),
+      duration: Duration(milliseconds: 800),
     )..repeat(reverse: true);
 
     // More Products continuous vertical animation
     _moreProductsController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 18),
+      duration: Duration(seconds: 18),
     )..repeat();
   }
 
   @override
   void dispose() {
+    _authSubscription?.cancel();
+    _roleSubscription?.cancel();
     _blinkingController?.dispose();
     _moreProductsController?.dispose();
     super.dispose();
@@ -101,34 +235,39 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
 
   @override
   Widget build(BuildContext context) {
-    // Minimum Order Badge
-    Widget minOrderBadge = Container(
-      padding: const EdgeInsets.all(6),
-      decoration: BoxDecoration(
-        color: const Color(0xFFEBF2FF),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFF0052FF), width: 0.8),
-      ),
-      child: const Row(
-        children: [
-          Icon(
-            Icons.local_shipping_outlined,
-            size: 14,
-            color: Color(0xFF0052FF),
-          ),
-          SizedBox(width: 4),
-          Expanded(
-            child: Text(
-              'Minimum Order\namount ₹1,000',
-              style: TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF0052FF),
-              ),
-            ),
-          ),
-        ],
-      ),
+    if (_detailsStream == null) {
+      return Scaffold(
+        appBar: AppBar(title: Text('Product Details')),
+        body: Center(child: Text('Select a product from the catalog.')),
+      );
+    }
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: _detailsStream,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Scaffold(
+            appBar: AppBar(title: Text('Product Details')),
+            body: Center(child: Text(catalogError(snapshot.error!))),
+          );
+        }
+        if (!snapshot.hasData) {
+          return Scaffold(body: Center(child: CircularProgressIndicator()));
+        }
+        if (!snapshot.data!.exists) {
+          return Scaffold(
+            appBar: AppBar(title: Text('Product Details')),
+            body: Center(child: Text('This product is no longer available.')),
+          );
+        }
+        _product = catalogProduct(snapshot.data!);
+        return _buildDetails(context);
+      },
+    );
+  }
+
+  Widget _buildDetails(BuildContext context) {
+    final Widget minOrderBadge = ShopMinimumBadge(
+      sellerId: _product['sellerId'],
     );
 
     return Scaffold(
@@ -141,11 +280,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
             // ============================================================
             Expanded(
               child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16.0,
-                  vertical: 12.0,
-                ),
+                physics: BouncingScrollPhysics(),
+                padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -162,19 +298,16 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                             height: 200,
                             width: double.infinity,
                             decoration: BoxDecoration(
-                              color: const Color(0xFFF7F8FA),
+                              color: Color(0xFFF7F8FA),
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: const Center(
-                              child: Icon(
-                                Icons.power,
-                                size: 100,
-                                color: Colors.black54,
-                              ),
+                            child: catalogImage(
+                              _images[_selectedImageIndex],
+                              height: 200,
                             ),
                           ),
 
-                          const SizedBox(height: 12),
+                          SizedBox(height: 12),
 
                           // Thumbnails
                           Row(
@@ -190,32 +323,32 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                                 child: Container(
                                   width: 42,
                                   height: 42,
-                                  margin: const EdgeInsets.only(right: 8),
+                                  margin: EdgeInsets.only(right: 8),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFFF7F8FA),
+                                    color: Color(0xFFF7F8FA),
                                     borderRadius: BorderRadius.circular(8),
                                     border: Border.all(
                                       color: isSelected
-                                          ? const Color(0xFF0052FF)
+                                          ? Color(0xFF0052FF)
                                           : Colors.grey.shade300,
                                       width: isSelected ? 2 : 1,
                                     ),
                                   ),
-                                  child: const Icon(
-                                    Icons.power_input,
-                                    size: 20,
-                                    color: Colors.black54,
+                                  child: catalogImage(
+                                    _images[index],
+                                    width: 42,
+                                    height: 42,
                                   ),
                                 ),
                               );
                             }),
                           ),
 
-                          const SizedBox(height: 16),
+                          SizedBox(height: 16),
 
                           // Product Title
-                          const Text(
-                            'Universal Wall Socket',
+                          Text(
+                            _product['productName'],
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
@@ -223,7 +356,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                             ),
                           ),
 
-                          const SizedBox(height: 6),
+                          SizedBox(height: 6),
 
                           // Rating
                           Row(
@@ -231,16 +364,20 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                               Row(
                                 children: List.generate(
                                   5,
-                                  (index) => const Icon(
-                                    Icons.star,
+                                  (index) => Icon(
+                                    _product['ratings'] > index
+                                        ? Icons.star
+                                        : Icons.star_border,
                                     size: 14,
                                     color: Colors.amber,
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 6),
-                              const Text(
-                                '(256 reviews)',
+                              SizedBox(width: 6),
+                              Text(
+                                _product['reviewCount'] == 0
+                                    ? 'Not rated'
+                                    : '${_product['reviewCount']} reviews',
                                 style: TextStyle(
                                   fontSize: 11,
                                   color: Colors.grey,
@@ -249,24 +386,24 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                             ],
                           ),
 
-                          const SizedBox(height: 10),
+                          SizedBox(height: 10),
 
                           // Price
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.baseline,
                             textBaseline: TextBaseline.alphabetic,
                             children: [
-                              const Text(
-                                '₹4.25',
+                              Text(
+                                _sellingPrice,
                                 style: TextStyle(
                                   fontSize: 20,
                                   fontWeight: FontWeight.bold,
                                   color: Color(0xFF0052FF),
                                 ),
                               ),
-                              const SizedBox(width: 8),
+                              SizedBox(width: 8),
                               Text(
-                                '₹5.00',
+                                _productMrp,
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: Colors.grey.shade500,
@@ -276,10 +413,19 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                             ],
                           ),
 
-                          const SizedBox(height: 16),
+                          SizedBox(height: 16),
 
+                          Text(
+                            '${_product['stockStatus']} • ${_product['status']}',
+                            style: TextStyle(
+                              color: _product['inStock'] == true
+                                  ? Colors.green
+                                  : Colors.red,
+                            ),
+                          ),
+                          SizedBox(height: 8),
                           // Product Highlights
-                          const Text(
+                          Text(
                             'Product Highlights',
                             style: TextStyle(
                               fontSize: 14,
@@ -288,23 +434,23 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                             ),
                           ),
 
-                          const SizedBox(height: 12),
+                          SizedBox(height: 12),
 
                           _buildHighlightRow(
                             icon: Icons.currency_rupee_outlined,
                             label: 'Product Mrp',
-                            value: '₹$_productMrp',
+                            value: _productMrp,
                           ),
 
                           _buildHighlightRow(
                             icon: Icons.currency_rupee_outlined,
                             label: 'Selling Price',
-                            value: '₹$_sellingPrice',
+                            value: _sellingPrice,
                           ),
 
                           _buildHighlightRow(
                             icon: Icons.electric_meter_outlined,
-                            label: 'Current Rating',
+                            label: 'Unit Type',
                             value: _currentRating,
                           ),
 
@@ -328,17 +474,17 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
 
                           _buildHighlightRow(
                             icon: Icons.description_outlined,
-                            label: 'Material',
+                            label: 'Description',
                             value: _material,
                             isLongText: true,
                           ),
 
-                          const SizedBox(height: 16),
+                          SizedBox(height: 16),
                         ],
                       ),
                     ),
 
-                    const SizedBox(width: 12),
+                    SizedBox(width: 12),
 
                     // ======================================================
                     // RIGHT COLUMN
@@ -352,7 +498,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                           // STORE DETAILS
                           // ==================================================
                           Container(
-                            padding: const EdgeInsets.all(12),
+                            padding: EdgeInsets.all(12),
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(12),
@@ -364,12 +510,12 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                                 Row(
                                   children: [
                                     Container(
-                                      padding: const EdgeInsets.all(6),
-                                      decoration: const BoxDecoration(
+                                      padding: EdgeInsets.all(6),
+                                      decoration: BoxDecoration(
                                         color: Color(0xFF0052FF),
                                         shape: BoxShape.circle,
                                       ),
-                                      child: const Icon(
+                                      child: Icon(
                                         Icons.storefront,
                                         color: Colors.white,
                                         size: 18,
@@ -378,27 +524,27 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                                   ],
                                 ),
 
-                                const SizedBox(height: 10),
+                                SizedBox(height: 10),
 
                                 Text(
-                                  'Shop ID: ELEC12345',
+                                  'Seller ID: ${_product['sellerId']}',
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: Colors.grey.shade600,
                                   ),
                                 ),
 
-                                const SizedBox(height: 4),
+                                SizedBox(height: 4),
 
-                                const Text(
-                                  'Dipak Marketing',
+                                Text(
+                                  _product['sellerShopName'],
                                   style: TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
 
-                                const SizedBox(height: 10),
+                                SizedBox(height: 10),
 
                                 Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -408,10 +554,10 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                                       size: 14,
                                       color: Colors.grey.shade600,
                                     ),
-                                    const SizedBox(width: 2),
+                                    SizedBox(width: 2),
                                     Expanded(
                                       child: Text(
-                                        '456 Power Street,\nTech City, CA 90210',
+                                        _product['sellerShopAddress'],
                                         style: TextStyle(
                                           fontSize: 13,
                                           color: Colors.grey.shade600,
@@ -422,7 +568,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                                   ],
                                 ),
 
-                                const SizedBox(height: 12),
+                                SizedBox(height: 12),
 
                                 // Blinking Minimum Order Badge
                                 if (_blinkingController != null)
@@ -436,12 +582,12 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                             ),
                           ),
 
-                          const SizedBox(height: 16),
+                          SizedBox(height: 16),
 
                           // ==================================================
                           // MORE PRODUCTS HEADER
                           // ==================================================
-                          const Padding(
+                          Padding(
                             padding: EdgeInsets.only(
                               left: 16.0,
                             ), // Adjust the value as needed
@@ -455,7 +601,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                             ),
                           ),
 
-                          const SizedBox(height: 10),
+                          SizedBox(height: 10),
 
                           // ==================================================
                           // CONTINUOUS BOTTOM -> TOP PRODUCTS
@@ -473,105 +619,136 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
             // FIXED BOTTOM ACTION BAR
             // ============================================================
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
                 color: Colors.white,
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.05),
                     blurRadius: 10,
-                    offset: const Offset(0, -3),
+                    offset: Offset(0, -3),
                   ),
                 ],
               ),
-              child: Row(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Sample Button
-                  Expanded(
-                    flex: 4,
-                    child: OutlinedButton(
-                      onPressed: () {},
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        side: const BorderSide(color: Color(0xFF0052FF)),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      child: const Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
+                  Row(
+                    children: [
+                      // Sample Button
+                      Expanded(
+                        flex: 4,
+                        child: OutlinedButton(
+                          onPressed:
+                              _canUseBuyerActions &&
+                                  !_sendingSample &&
+                                  !_sampleSent
+                              ? _requestSample
+                              : null,
+                          style: OutlinedButton.styleFrom(
+                            padding: EdgeInsets.symmetric(vertical: 10),
+                            side: BorderSide(
+                              color: _canUseBuyerActions
+                                  ? Color(0xFF0052FF)
+                                  : Colors.grey,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(
-                                Icons.inventory_2_outlined,
-                                size: 14,
-                                color: Color(0xFF0052FF),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.inventory_2_outlined,
+                                    size: 14,
+                                    color: _canUseBuyerActions
+                                        ? Color(0xFF0052FF)
+                                        : Colors.grey,
+                                  ),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    'Sample',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: _canUseBuyerActions
+                                          ? Color(0xFF0052FF)
+                                          : Colors.grey,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              SizedBox(width: 4),
                               Text(
-                                'Sample',
+                                _sendingSample
+                                    ? 'Submitting…'
+                                    : _sampleSent
+                                    ? 'Request sent'
+                                    : 'Get product sample',
                                 style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF0052FF),
+                                  fontSize: 10,
+                                  color: Colors.grey,
                                 ),
                               ),
                             ],
                           ),
-                          Text(
-                            'Get product sample',
-                            style: TextStyle(fontSize: 10, color: Colors.grey),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(width: 12),
-
-                  // Add To Cart Button
-                  Expanded(
-                    flex: 5,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const CartScreen(),
-                          ),
-                        );
-                      },
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        backgroundColor: const Color(0xFF0052FF),
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
                         ),
                       ),
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.shopping_cart_outlined,
-                            size: 16,
-                            color: Colors.white,
-                          ),
-                          SizedBox(width: 6),
-                          Text(
-                            'Add to Cart',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
+
+                      SizedBox(width: 12),
+
+                      // Add To Cart Button
+                      Expanded(
+                        flex: 5,
+                        child: ElevatedButton(
+                          onPressed:
+                              _canUseBuyerActions &&
+                                  _product['inStock'] == true &&
+                                  _product['isActive'] == true
+                              ? () => catalogComingSoon(context, 'Cart')
+                              : null,
+                          style: ElevatedButton.styleFrom(
+                            padding: EdgeInsets.symmetric(vertical: 14),
+                            backgroundColor: Color(0xFF0052FF),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
                             ),
                           ),
-                        ],
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.shopping_cart_outlined,
+                                size: 16,
+                                color: Colors.white,
+                              ),
+                              SizedBox(width: 6),
+                              Text(
+                                'Add to Cart',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
+                  if (!_canUseBuyerActions) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      _buyerActionMessage,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -586,10 +763,19 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
   // ======================================================================
 
   Widget _buildMoreProductsAnimation() {
-    const double itemHeight = 52.0;
-    const double viewportHeight = 380.0;
+    double itemHeight = 52.0;
+    double viewportHeight = 380.0;
 
     final int itemCount = _moreProducts.length;
+    if (catalogLoading || catalogFailure != null) {
+      return SizedBox(height: viewportHeight, child: catalogNotice());
+    }
+    if (itemCount == 0) {
+      return SizedBox(
+        height: viewportHeight,
+        child: Center(child: Text('No other products from this seller.')),
+      );
+    }
 
     return SizedBox(
       height: viewportHeight,
@@ -615,7 +801,17 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                   right: 0,
                   top: y,
                   height: itemHeight,
-                  child: _buildMoreProductItem(_moreProducts[index]),
+                  child: GestureDetector(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ProductDetailsScreen(
+                          productId: _moreProducts[index]['id'],
+                        ),
+                      ),
+                    ),
+                    child: _buildMoreProductItem(_moreProducts[index]),
+                  ),
                 );
               }),
             );
@@ -627,7 +823,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
 
   Widget _buildMoreProductItem(Map<String, dynamic> item) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: EdgeInsets.only(bottom: 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -635,7 +831,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: const Color(0xFFF7F8FA),
+              color: Color(0xFFF7F8FA),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
@@ -645,7 +841,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
             ),
           ),
 
-          const SizedBox(width: 8),
+          SizedBox(width: 8),
 
           Expanded(
             child: Column(
@@ -655,7 +851,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
               children: [
                 Text(
                   item['title'] as String,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                     color: Colors.black87,
@@ -665,11 +861,11 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                   overflow: TextOverflow.ellipsis,
                 ),
 
-                const SizedBox(height: 2),
+                SizedBox(height: 2),
 
                 Text(
                   item['price'] as String,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
                     color: Color(0xFF0052FF),
@@ -694,7 +890,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
     bool isLongText = false,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10.0),
+      padding: EdgeInsets.only(bottom: 10.0),
       child: Column(
         children: [
           Row(
@@ -702,9 +898,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                 ? CrossAxisAlignment.start
                 : CrossAxisAlignment.center,
             children: [
-              Icon(icon, size: 16, color: const Color(0xFF0052FF)),
+              Icon(icon, size: 16, color: Color(0xFF0052FF)),
 
-              const SizedBox(width: 8),
+              SizedBox(width: 8),
 
               SizedBox(
                 width: 75,
@@ -721,7 +917,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
               Expanded(
                 child: Text(
                   value,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 10.5,
                     fontWeight: FontWeight.w500,
                     color: Colors.black87,
@@ -732,7 +928,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
             ],
           ),
 
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
 
           Divider(height: 1, color: Colors.grey.shade200),
         ],

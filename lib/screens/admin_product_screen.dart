@@ -1,3 +1,6 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'catalog_support.dart';
 import 'package:flutter/material.dart';
 import 'add_product_screen.dart';
 
@@ -8,85 +11,75 @@ class AdminProductsScreen extends StatefulWidget {
   State<AdminProductsScreen> createState() => _AdminProductsScreenState();
 }
 
-class _AdminProductsScreenState extends State<AdminProductsScreen> {
+class _AdminProductsScreenState extends State<AdminProductsScreen>
+    with CatalogState<AdminProductsScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
-  final List<String> _categories = [
-    'Wires & Cables',
-    'Switches & Accessories',
-    'Lighting & LEDs',
-    'Switchgears & Automation',
-  ];
+  List<String> get _categories => catalogCategories;
+  List<Map<String, dynamic>> get _products => catalogProducts;
+  final Set<String> _busy = {};
 
-  final List<Map<String, dynamic>> _products = [
-    {
-      'id': 'PRD-801',
-      'productName': '1.5 Sqmm Copper Flexible Wire (90m Roll)',
-      'category': 'Wires & Cables',
-      'unitPrice': '₹ 1,150',
-      'mrp': '₹ 1,800',
-      'sellingPrice': '₹ 1,250',
-      'mrpUnitPrice': '₹ 1,600',
-      'minOrderQuantity': '50 Units',
-      'howManyProductsInUnit': '10 Rolls',
-      'unitTypes': 'Box / Bundle',
-      'ratings': 4.8,
-      'warranty': '12 Months Brand Warranty',
-      'description':
-          'High-grade flame retardant copper wire suitable for domestic and commercial electrical fittings.',
-      'frontImage': 'https://picsum.photos/id/1/300/300',
-      'backImage': 'https://picsum.photos/id/2/300/300',
-      'sideImage': 'https://picsum.photos/id/3/300/300',
-      'status': 'Approved',
-    },
-    {
-      'id': 'PRD-802',
-      'productName': '4-Way Modular Switch Board Plate',
-      'category': 'Switches & Accessories',
-      'unitPrice': '₹ 85',
-      'mrp': '₹ 150',
-      'sellingPrice': '₹ 95',
-      'mrpUnitPrice': '₹ 140',
-      'minOrderQuantity': '50 Units',
-      'howManyProductsInUnit': '20 Pieces',
-      'unitTypes': 'Carton',
-      'ratings': 4.3,
-      'warranty': '6 Months Replacement Warranty',
-      'description':
-          'Polycarbonate modular cover plate with anti-bacterial coating.',
-      'frontImage': 'https://picsum.photos/id/10/300/300',
-      'backImage': 'https://picsum.photos/id/11/300/300',
-      'sideImage': 'https://picsum.photos/id/12/300/300',
-      'status': 'Out of Stock',
-    },
-  ];
-
-  void _updateProductStatus(Map<String, dynamic> product, String newStatus) {
-    setState(() {
-      product['status'] = newStatus;
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${product['productName']} set to "$newStatus"'),
-        duration: const Duration(seconds: 1),
-      ),
-    );
+  Future<void> _updateProductStatus(
+    Map<String, dynamic> product,
+    String newStatus,
+  ) async {
+    final id = product['id'] as String;
+    if (_busy.contains(id)) return;
+    setState(() => _busy.add(id));
+    try {
+      final stock = newStatus == 'In Stock' || newStatus == 'Out of Stock';
+      await FirebaseFirestore.instance.collection('products').doc(id).update({
+        if (stock) 'inStock': newStatus == 'In Stock',
+        if (stock) 'stockStatus': newStatus,
+        if (!stock) 'status': newStatus,
+        if (!stock) 'isActive': newStatus == 'Approved',
+        'updatedBy': FirebaseAuth.instance.currentUser!.uid,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(catalogError(error))));
+      }
+    } finally {
+      if (mounted) setState(() => _busy.remove(id));
+    }
   }
 
-  void _deleteProduct(int index) {
-    final deletedName = _products[index]['productName'];
-    setState(() {
-      _products.removeAt(index);
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$deletedName removed from inventory'),
-        duration: const Duration(seconds: 1),
+  Future<void> _deleteProduct(int index) async {
+    final product = _products[index];
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete product?'),
+        content: Text(product['productName']),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
       ),
     );
+    if (confirmed != true || !mounted) return;
+    try {
+      await FirebaseFirestore.instance
+          .collection('products')
+          .doc(product['id'])
+          .delete();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(catalogError(error))));
+      }
+    }
   }
 
   void _openAddCategorySheet() {
@@ -161,11 +154,31 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-                    onPressed: () {
+                    onPressed: () async {
                       if (formKey.currentState!.validate()) {
-                        setState(() {
-                          _categories.add(categoryController.text.trim());
-                        });
+                        try {
+                          await FirebaseFirestore.instance
+                              .collection('categories')
+                              .doc(
+                                Uri.encodeComponent(
+                                  categoryController.text.trim().toLowerCase(),
+                                ),
+                              )
+                              .set({
+                                'name': categoryController.text.trim(),
+                                'createdBy':
+                                    FirebaseAuth.instance.currentUser!.uid,
+                                'createdAt': FieldValue.serverTimestamp(),
+                              });
+                        } catch (error) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(catalogError(error))),
+                            );
+                          }
+                          return;
+                        }
+                        if (!context.mounted) return;
                         Navigator.pop(context);
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
@@ -194,23 +207,18 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
   }
 
   void _navigateToAddProductScreen() async {
-    final newProduct = await Navigator.push<Map<String, dynamic>>(
+    if (_categories.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Add a category first.')));
+      return;
+    }
+    await Navigator.push<bool>(
       context,
       MaterialPageRoute(
-        builder: (context) => AddProductScreen(categories: _categories),
+        builder: (_) => AddProductScreen(categories: _categories),
       ),
     );
-
-    if (newProduct != null) {
-      setState(() {
-        _products.insert(0, newProduct);
-      });
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('New product added to inventory!')),
-      );
-    }
   }
 
   Color _getStatusColor(String status) {
@@ -220,7 +228,7 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
       case 'Inactive':
         return Colors.orange;
       case 'Out of Stock':
-        return Colors.grey.shade700;
+        return Colors.red;
       case 'Pending Approval':
       default:
         return const Color(0xFF0052FF);
@@ -240,7 +248,9 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
           .toLowerCase();
       final productId = (product['id'] ?? '').toString().toLowerCase();
       final category = (product['category'] ?? '').toString().toLowerCase();
-      final status = (product['status'] ?? '').toString().toLowerCase();
+      final status =
+          '${product['status']} ${product['stockStatus']} ${product['sellerName']}'
+              .toLowerCase();
 
       return productName.contains(query) ||
           productId.contains(query) ||
@@ -367,9 +377,12 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
               ),
             ),
           ),
+          if (categoryFailure != null) catalogNotice(),
           const SizedBox(height: 8),
           Expanded(
-            child: _filteredProducts.isEmpty
+            child: catalogLoading || catalogFailure != null
+                ? catalogNotice()
+                : _filteredProducts.isEmpty
                 ? Center(
                     child: Padding(
                       padding: const EdgeInsets.all(24),
@@ -431,6 +444,7 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                             context,
                           ).copyWith(dividerColor: Colors.transparent),
                           child: ExpansionTile(
+                            key: PageStorageKey(product['id']),
                             tilePadding: const EdgeInsets.all(16),
                             childrenPadding: const EdgeInsets.symmetric(
                               horizontal: 16,
@@ -492,10 +506,12 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                             subtitle: Padding(
                               padding: const EdgeInsets.only(top: 4.0),
                               child: Text(
-                                'Category: ${product['category']} • SP: ${product['sellingPrice']}',
+                                'Category: ${product['category']} • SP: ${product['sellingPrice']} • ${product['stockStatus']}',
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: Colors.grey.shade700,
+                                  color: product['inStock'] == false
+                                      ? Colors.red
+                                      : Colors.grey.shade700,
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
@@ -605,7 +621,9 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                               _buildDetailRow(
                                 icon: Icons.star_outline,
                                 label: 'Product Rating',
-                                value: '${product['ratings']} / 5.0',
+                                value: product['reviewCount'] == 0
+                                    ? 'Not rated'
+                                    : '${product['ratings']} / 5.0',
                               ),
                               _buildDetailRow(
                                 icon: Icons.verified_user_outlined,
@@ -617,112 +635,74 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                                 label: 'Description',
                                 value: product['description'],
                               ),
+                              _buildDetailRow(
+                                icon: Icons.storefront,
+                                label: 'Seller',
+                                value:
+                                    product['sellerShopName'].toString().isEmpty
+                                    ? product['sellerName']
+                                    : product['sellerShopName'],
+                              ),
+                              _buildDetailRow(
+                                icon: Icons.inventory_2_outlined,
+                                label: 'Stock',
+                                value: product['stockStatus'],
+                              ),
                               const SizedBox(height: 16),
-                              Row(
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 4,
                                 children: [
-                                  Expanded(
-                                    child: ElevatedButton(
-                                      onPressed: product['status'] == 'Approved'
-                                          ? null
-                                          : () => _updateProductStatus(
-                                              product,
-                                              'Approved',
-                                            ),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.green,
-                                        foregroundColor: Colors.white,
-                                        elevation: 0,
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 8,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            8,
+                                  ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.green,
+                                      foregroundColor: Colors.white,
+                                    ),
+                                    onPressed:
+                                        _busy.contains(product['id']) ||
+                                            product['status'] == 'Approved'
+                                        ? null
+                                        : () => _updateProductStatus(
+                                            product,
+                                            'Approved',
                                           ),
-                                        ),
-                                      ),
-                                      child: const Text(
-                                        'Approve',
-                                        style: TextStyle(fontSize: 11),
-                                      ),
+                                    child: const Text('Approve'),
+                                  ),
+                                  OutlinedButton(
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: Colors.orange.shade800,
+                                    ),
+                                    onPressed:
+                                        _busy.contains(product['id']) ||
+                                            product['status'] == 'Inactive'
+                                        ? null
+                                        : () => _updateProductStatus(
+                                            product,
+                                            'Inactive',
+                                          ),
+                                    child: const Text('Inactive'),
+                                  ),
+                                  OutlinedButton(
+                                    onPressed: _busy.contains(product['id'])
+                                        ? null
+                                        : () => _updateProductStatus(
+                                            product,
+                                            product['inStock'] == true
+                                                ? 'Out of Stock'
+                                                : 'In Stock',
+                                          ),
+                                    child: Text(
+                                      product['inStock'] == true
+                                          ? 'Out of Stock'
+                                          : 'In Stock',
                                     ),
                                   ),
-                                  const SizedBox(width: 6),
-                                  Expanded(
-                                    child: OutlinedButton(
-                                      onPressed: product['status'] == 'Inactive'
-                                          ? null
-                                          : () => _updateProductStatus(
-                                              product,
-                                              'Inactive',
-                                            ),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: Colors.orange.shade800,
-                                        side: BorderSide(
-                                          color: product['status'] == 'Inactive'
-                                              ? Colors.orange
-                                              : Colors.grey.shade300,
-                                        ),
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 8,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                        ),
-                                      ),
-                                      child: const Text(
-                                        'Inactive',
-                                        style: TextStyle(fontSize: 11),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Expanded(
-                                    child: OutlinedButton(
-                                      onPressed:
-                                          product['status'] == 'Out of Stock'
-                                          ? null
-                                          : () => _updateProductStatus(
-                                              product,
-                                              'Out of Stock',
-                                            ),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: Colors.grey.shade800,
-                                        side: BorderSide(
-                                          color:
-                                              product['status'] ==
-                                                  'Out of Stock'
-                                              ? Colors.grey.shade600
-                                              : Colors.grey.shade300,
-                                        ),
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 8,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                        ),
-                                      ),
-                                      child: const Text(
-                                        'Out of Stock',
-                                        style: TextStyle(fontSize: 10),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 4),
                                   IconButton(
-                                    onPressed: () {
-                                      final originalIndex = _products.indexOf(
-                                        product,
-                                      );
-                                      if (originalIndex != -1) {
-                                        _deleteProduct(originalIndex);
-                                      }
-                                    },
+                                    onPressed: _busy.contains(product['id'])
+                                        ? null
+                                        : () => _deleteProduct(
+                                            _products.indexOf(product),
+                                          ),
                                     icon: const Icon(
                                       Icons.delete_outline,
                                       color: Colors.red,
@@ -827,9 +807,11 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                 const SizedBox(height: 1),
                 Text(
                   value,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
-                    color: Colors.black87,
+                    color: value == 'Out of Stock'
+                        ? Colors.red
+                        : Colors.black87,
                     fontWeight: FontWeight.w400,
                   ),
                 ),

@@ -158,7 +158,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                     ),
                                   ),
                                   Text(
-                                    '\₹${(item['price'] as double).toStringAsFixed(2)}',
+                                    '₹${(item['price'] as double).toStringAsFixed(2)}',
                                     style: const TextStyle(
                                       fontSize: 12.5,
                                       fontWeight: FontWeight.bold,

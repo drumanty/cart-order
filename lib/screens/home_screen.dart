@@ -1,6 +1,8 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'catalog_support.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'home_screen_two.dart';
 import 'product_details_screen.dart';
 import 'estimated_order_screen.dart';
 import 'upload_query_screen.dart';
@@ -14,7 +16,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
   int _currentBottomIndex = 0;
   int _bannerIndex = 0;
 
@@ -24,15 +26,20 @@ class _HomeScreenState extends State<HomeScreen> {
   Timer? _bannerTimer;
   Timer? _categoryTimer;
 
-  final List<Map<String, String>> _categories = const [
-    {'name': 'Electrical', 'icon': 'electrical'},
-    {'name': 'Hardware', 'icon': 'hardware'},
-    {'name': 'Lighting', 'icon': 'lighting'},
-    {'name': 'Plumbing', 'icon': 'plumbing'},
-    {'name': 'Sanitary', 'icon': 'sanitary'},
-    {'name': 'Tools', 'icon': 'tools'},
-    {'name': 'Paints', 'icon': 'paints'},
+  String _catalogSearch = '';
+  String? _catalogCategory;
+  List<Map<String, String>> get _categories => [
+    {'name': 'All', 'icon': 'category'},
+    ...catalogCategories.map((name) => {'name': name, 'icon': 'category'}),
   ];
+  List<Map<String, dynamic>> get _visibleProducts => catalogProducts.where((p) {
+    return p['isActive'] == true &&
+        p['status'] == 'Approved' &&
+        (_catalogCategory == null || p['category'] == _catalogCategory) &&
+        '${p['productName']} ${p['category']} ${p['sellerShopName']} ${p['id']}'
+            .toLowerCase()
+            .contains(_catalogSearch.toLowerCase());
+  }).toList();
 
   final List<Map<String, String>> _banners = const [
     {
@@ -80,7 +87,9 @@ class _HomeScreenState extends State<HomeScreen> {
       if (_categoryScrollController.hasClients) {
         double maxScroll = _categoryScrollController.position.maxScrollExtent;
         double currentScroll = _categoryScrollController.offset;
-        double targetScroll = currentScroll + 80.0;
+        double targetScroll = (currentScroll + 80.0)
+            .clamp(0.0, maxScroll)
+            .toDouble();
 
         if (currentScroll >= maxScroll) {
           targetScroll = 0.0;
@@ -232,6 +241,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           ],
                         ),
                         child: TextField(
+                          onChanged: (value) =>
+                              setState(() => _catalogSearch = value),
                           decoration: InputDecoration(
                             hintText: 'Search Your Products',
                             hintStyle: TextStyle(
@@ -298,32 +309,39 @@ class _HomeScreenState extends State<HomeScreen> {
                   itemCount: _categories.length,
                   itemBuilder: (context, index) {
                     final item = _categories[index];
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                      child: Column(
-                        children: [
-                          Container(
-                            width: 58,
-                            height: 58,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFEBF2FF),
-                              shape: BoxShape.circle,
+                    return GestureDetector(
+                      onTap: () => setState(
+                        () => _catalogCategory = item['name'] == 'All'
+                            ? null
+                            : item['name'],
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                        child: Column(
+                          children: [
+                            Container(
+                              width: 58,
+                              height: 58,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFFEBF2FF),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                _getCategoryIcon(item['icon']!),
+                                color: const Color(0xFF0052FF),
+                                size: 26,
+                              ),
                             ),
-                            child: Icon(
-                              _getCategoryIcon(item['icon']!),
-                              color: const Color(0xFF0052FF),
-                              size: 26,
+                            const SizedBox(height: 6),
+                            Text(
+                              item['name']!,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            item['name']!,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     );
                   },
@@ -426,30 +444,35 @@ class _HomeScreenState extends State<HomeScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 16.0),
                 child: Column(
                   children: [
-                    _buildProductCard(
-                      title: 'AP 2 Pin Top Avon 3\nParts Heavy Pin H030',
-                      price: '₹ 12.50',
-                      unit: '/Piece',
-                      specs: const {
-                        'Current Rating:': '6 A',
-                        'Plug Moulding:': 'Moulded Plug',
-                        'Body Material:': 'Polycarbonate',
-                        'Pin Material:': 'Brass',
-                      },
-                      icon: Icons.power,
-                    ),
-                    const SizedBox(height: 12),
-                    _buildProductCard(
-                      title: 'Finolex FR PVC Insulated\nCopper Wire 1.5 Sqmm',
-                      price: '₹ 45.80',
-                      unit: '/Meter',
-                      specs: const {
-                        'Current Rating:': '1100 V',
-                        'Insulation:': 'PVC',
-                        'Conductor:': 'Copper',
-                        'Size:': '1.5 Sqmm',
-                      },
-                      icon: Icons.electrical_services,
+                    if (catalogLoading ||
+                        catalogFailure != null ||
+                        categoryFailure != null)
+                      catalogNotice(),
+                    if (!catalogLoading &&
+                        catalogFailure == null &&
+                        _visibleProducts.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Text('No products found.'),
+                      ),
+                    ..._visibleProducts.map(
+                      (product) => Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _buildProductCard(
+                          productId: product['id'],
+                          imageUrl: product['frontImage'],
+                          title: product['productName'],
+                          price: product['sellingPrice'],
+                          unit: product['unitTypes'],
+                          specs: {
+                            'Category:': product['category'],
+                            'Min quantity:': product['minOrderQuantity'],
+                            'Seller:': product['sellerShopName'],
+                            'Stock:': product['stockStatus'],
+                          },
+                          icon: Icons.inventory_2_outlined,
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 20),
                   ],
@@ -484,7 +507,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       shape: BoxShape.circle,
                     ),
                     child: const Text(
-                      '3',
+                      '•',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 9,
@@ -511,6 +534,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildProductCard({
+    required String productId,
+    required String imageUrl,
     required String title,
     required String price,
     required String unit,
@@ -542,7 +567,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   color: const Color(0xFFF7F9FC),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(icon, size: 48, color: const Color(0xFF0052FF)),
+                child: catalogImage(imageUrl, width: 100, height: 100),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -609,10 +634,12 @@ class _HomeScreenState extends State<HomeScreen> {
                             Expanded(
                               child: Text(
                                 e.value,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.black87,
+                                  color: e.value == 'Out of Stock'
+                                      ? Colors.red
+                                      : Colors.black87,
                                 ),
                               ),
                             ),
@@ -634,7 +661,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => const ProductDetailsScreen(),
+                        builder: (context) =>
+                            ProductDetailsScreen(productId: productId),
                       ),
                     );
                   },
@@ -658,14 +686,11 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const HomeScreenTwo(),
-                      ),
-                    );
-                  },
+                  onPressed: () => _submitDirectEnquiry(
+                    productId: productId,
+                    productName: title,
+                    imageUrl: imageUrl,
+                  ),
                   icon: const Icon(
                     Icons.phone_outlined,
                     size: 16,
@@ -689,6 +714,83 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _submitDirectEnquiry({
+    required String productId,
+    required String productName,
+    required String imageUrl,
+  }) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please sign in as a Buyer.')),
+          );
+        }
+        return;
+      }
+      final profile = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+      final data = profile.data() ?? <String, dynamic>{};
+      if (data['userType'] != 'Buyer' || data['accountStatus'] != 'approved') {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('This function is only for approved Buyers.'),
+            ),
+          );
+        }
+        return;
+      }
+      await FirebaseFirestore.instance.collection('enquiries').add({
+        'buyerId': user.uid,
+        'buyerName': '${data['firstName'] ?? ''} ${data['lastName'] ?? ''}'
+            .trim(),
+        'buyerEmail': user.email ?? '',
+        'mobileNumber': (data['mobileNumber'] ?? '').toString(),
+        'buyerAddress': (data['shopAddress'] ?? '').toString(),
+        'shopName': (data['shopName'] ?? '').toString(),
+        'productId': productId,
+        'productName': productName,
+        'productImage': imageUrl,
+        'status': 'submitted',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Enquiry submitted'),
+          content: const Text(
+            'Our support team will contact you within 24 hours.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    } on FirebaseException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not submit enquiry (${error.code}).')),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not submit enquiry. Please try again.'),
+          ),
+        );
+      }
+    }
   }
 
   IconData _getCategoryIcon(String iconKey) {

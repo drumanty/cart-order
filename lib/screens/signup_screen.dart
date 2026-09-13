@@ -595,11 +595,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
               !RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(value.trim())) {
             return 'Enter a valid email address';
           }
-          if (controller == _passwordController && value.length < 6)
+          if (controller == _passwordController && value.length < 6) {
             return 'Use at least 6 characters';
+          }
           if (controller == _confirmPasswordController &&
-              value != _passwordController.text)
+              value != _passwordController.text) {
             return 'Passwords do not match';
+          }
           return null;
         },
         decoration: InputDecoration(

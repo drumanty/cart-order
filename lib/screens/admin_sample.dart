@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -9,115 +11,107 @@ class AdminSampleScreen extends StatefulWidget {
 }
 
 class _AdminSampleScreenState extends State<AdminSampleScreen> {
-  final List<Map<String, dynamic>> _sampleRequests = [
-    {
-      'sampleId': 'SMP-2026-001',
-      'userName': 'Rahul Sharma',
-      'userMobile': '+91 98765 43210',
-      'productID': 'PRD-2026-010',
-      'productName': 'Smart Modular Touch Switch',
-      'shopName': 'Dipak Store',
-      'date': '08 Sep 2026',
-      'status': 'Pending',
-      'sampleImageUrl': 'https://picsum.photos/id/1/600/400',
-      'comments': [
-        {
-          'sender': 'Admin',
-          'text':
-              'Sample request received. Will process and update the status shortly.',
-          'time': '08 Sep 2026, 11:00 AM',
-        },
-      ],
-    },
-    {
-      'sampleId': 'SMP-2026-002',
-      'userName': 'Priya Patel',
-      'userMobile': '+91 91234 56789',
-      'productID': 'PRD-2026-011',
-      'productName': '3-Core 16mm Armoured Cable',
-      'shopName': 'Electro World',
-      'date': '04 Sep 2026',
-      'status': 'In Review',
-      'sampleImageUrl': 'https://picsum.photos/id/10/600/400',
-      'comments': [
-        {
-          'sender': 'Admin',
-          'text':
-              'Dispatched query to warehouse to arrange sample spool cutting.',
-          'time': '05 Sep 2026, 11:00 AM',
-        },
-      ],
-    },
-    {
-      'sampleId': 'SMP-2026-003',
-      'userName': 'Amit Verma',
-      'userMobile': '+91 99887 76655',
-      'productID': 'PRD-2026-012',
-      'productName': '12W LED Panel Light',
-      'shopName': 'Shree Electricals',
-      'date': '01 Sep 2026',
-      'status': 'Approved',
-      'sampleImageUrl': 'https://picsum.photos/id/20/600/400',
-      'comments': [
-        {
-          'sender': 'Admin',
-          'text':
-              'Sample request approved. Courier tracking details updated in system.',
-          'time': '02 Sep 2026, 04:30 PM',
-        },
-      ],
-    },
-  ];
+  List<Map<String, dynamic>> _sampleRequests = [];
+  final _requestsStream = FirebaseFirestore.instance
+      .collection('sample_requests')
+      .orderBy('createdAt', descending: true)
+      .snapshots();
+  final Map<String, TextEditingController> _commentControllers = {};
+  final Set<String> _busy = {};
+  // Keep scroll wrappers consistent when expansion and Firestore rebuild.
+  static final ScrollBehavior _sampleScrollBehavior =
+      const MaterialScrollBehavior().copyWith(
+        scrollbars: false,
+        overscroll: false,
+      );
+  final ScrollController _listController = ScrollController();
+  final Map<String, Stream<QuerySnapshot<Map<String, dynamic>>>>
+  _activityStreams = {};
 
-  final Map<int, TextEditingController> _commentControllers = {};
-
+  Stream<QuerySnapshot<Map<String, dynamic>>> _activityStream(String id) =>
+      _activityStreams.putIfAbsent(
+        id,
+        () => FirebaseFirestore.instance
+            .collection('sample_requests')
+            .doc(id)
+            .collection('activity')
+            .orderBy('createdAt')
+            .snapshots(),
+      );
+  String _date(dynamic v) => v is Timestamp
+      ? v.toDate().toLocal().toString().substring(0, 19)
+      : 'Saving…';
   @override
   void dispose() {
-    for (var controller in _commentControllers.values) {
-      controller.dispose();
+    for (final c in _commentControllers.values) {
+      c.dispose();
     }
+    _listController.dispose();
     super.dispose();
   }
 
-  TextEditingController _getController(int index) {
-    if (!_commentControllers.containsKey(index)) {
-      _commentControllers[index] = TextEditingController();
+  TextEditingController _getController(String id) =>
+      _commentControllers.putIfAbsent(id, () => TextEditingController());
+
+  Future<void> _addComment(String id) async {
+    final c = _getController(id);
+    final text = c.text.trim();
+    if (text.isEmpty || text.length > 5000 || _busy.contains(id)) return;
+    setState(() => _busy.add(id));
+    try {
+      final uid = FirebaseAuth.instance.currentUser!.uid;
+      await FirebaseFirestore.instance
+          .collection('sample_requests')
+          .doc(id)
+          .collection('activity')
+          .add({
+            'type': 'comment',
+            'sender': 'Admin',
+            'senderId': uid,
+            'text': text,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+      if (mounted && c.text.trim() == text) c.clear();
+    } catch (_) {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not save comment.')),
+        );
+    } finally {
+      if (mounted) setState(() => _busy.remove(id));
     }
-    return _commentControllers[index]!;
   }
 
-  void _addComment(int index) {
-    final controller = _getController(index);
-    final text = controller.text.trim();
-
-    if (text.isEmpty) return;
-
-    setState(() {
-      final List<Map<String, dynamic>> comments =
-          _sampleRequests[index]['comments'];
-      comments.add({'sender': 'Admin', 'text': text, 'time': 'Just now'});
-      controller.clear();
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Comment added successfully'),
-        duration: Duration(seconds: 1),
-      ),
-    );
-  }
-
-  void _updateAdminStatus(int index, String newStatus) {
-    setState(() {
-      _sampleRequests[index]['status'] = newStatus;
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Status updated to "$newStatus"'),
-        duration: const Duration(seconds: 1),
-      ),
-    );
+  Future<void> _updateAdminStatus(String id, String newStatus) async {
+    if (_busy.contains(id)) return;
+    setState(() => _busy.add(id));
+    try {
+      final uid = FirebaseAuth.instance.currentUser!.uid;
+      final ref = FirebaseFirestore.instance
+          .collection('sample_requests')
+          .doc(id);
+      final batch = FirebaseFirestore.instance.batch();
+      batch.update(ref, {
+        'status': newStatus,
+        'updatedBy': uid,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      batch.set(ref.collection('activity').doc(), {
+        'type': 'status',
+        'sender': 'Admin',
+        'senderId': uid,
+        'text': 'Status changed to $newStatus',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      await batch.commit();
+    } catch (_) {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not save status and history.')),
+        );
+    } finally {
+      if (mounted) setState(() => _busy.remove(id));
+    }
   }
 
   void _copyToClipboard(String text, String label) {
@@ -190,30 +184,73 @@ class _AdminSampleScreenState extends State<AdminSampleScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF7F8FA),
-      appBar: AppBar(
-        title: const Text('Sample Requests'),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        elevation: 0.5,
-      ),
-      body: _sampleRequests.isEmpty
-          ? const Center(
-              child: Text(
-                'No sample requests found.',
-                style: TextStyle(color: Colors.grey, fontSize: 14),
-              ),
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.all(16.0),
-              itemCount: _sampleRequests.length,
-              itemBuilder: (context, index) {
-                final sample = _sampleRequests[index];
-                return _buildSampleCard(context, sample, index);
-              },
+  Widget build(
+    BuildContext context,
+  ) => StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+    stream: _requestsStream,
+    builder: (context, snapshot) {
+      if (snapshot.hasError)
+        return Scaffold(
+          appBar: AppBar(title: const Text('Sample Requests')),
+          body: const Center(
+            child: Text(
+              'Could not load requests. Check Admin access and sample request rules.',
             ),
+          ),
+        );
+      if (!snapshot.hasData)
+        return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      _sampleRequests = snapshot.data!.docs
+          .map(
+            (doc) => <String, dynamic>{
+              ...doc.data(),
+              'sampleId': doc.id,
+              'date': _date(doc.data()['createdAt']),
+            },
+          )
+          .toList();
+      return _buildScreen(context);
+    },
+  );
+
+  Widget _buildScreen(BuildContext context) {
+    return ScrollConfiguration(
+      behavior: _sampleScrollBehavior,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF7F8FA),
+        appBar: AppBar(
+          title: const Text('Sample Requests'),
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+          elevation: 0.5,
+        ),
+        body: _sampleRequests.isEmpty
+            ? const Center(
+                child: Text(
+                  'No sample requests found.',
+                  style: TextStyle(color: Colors.grey, fontSize: 14),
+                ),
+              )
+            : ListView.builder(
+                key: const PageStorageKey<String>('sample-request-list'),
+                controller: _listController,
+                primary: false,
+                findChildIndexCallback: (key) {
+                  if (key is! ValueKey<String>) return null;
+                  final index = _sampleRequests.indexWhere(
+                    (sample) =>
+                        'sample-card-${sample['sampleId']}' == key.value,
+                  );
+                  return index < 0 ? null : index;
+                },
+                padding: const EdgeInsets.all(16.0),
+                itemCount: _sampleRequests.length,
+                itemBuilder: (context, index) {
+                  final sample = _sampleRequests[index];
+                  return _buildSampleCard(context, sample, index);
+                },
+              ),
+      ),
     );
   }
 
@@ -224,10 +261,11 @@ class _AdminSampleScreenState extends State<AdminSampleScreen> {
   ) {
     final String currentStatus = sample['status'];
     final Color statusColor = _getStatusColor(currentStatus);
-    final List<Map<String, dynamic>> comments = sample['comments'];
+    final String id = sample['sampleId'];
     final String? sampleImageUrl = sample['sampleImageUrl'];
 
     return Container(
+      key: ValueKey<String>('sample-card-$id'),
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -244,6 +282,8 @@ class _AdminSampleScreenState extends State<AdminSampleScreen> {
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
+          key: PageStorageKey<String>('sample-expansion-$id'),
+          maintainState: true,
           tilePadding: const EdgeInsets.all(16),
           childrenPadding: const EdgeInsets.symmetric(
             horizontal: 16,
@@ -252,12 +292,15 @@ class _AdminSampleScreenState extends State<AdminSampleScreen> {
           title: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                sample['sampleId'],
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 15,
-                  color: Colors.black,
+              Expanded(
+                child: Text(
+                  sample['sampleId'],
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                    color: Colors.black,
+                  ),
                 ),
               ),
               Container(
@@ -282,29 +325,26 @@ class _AdminSampleScreenState extends State<AdminSampleScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.person_outline,
                       size: 14,
-                      color: Colors.grey.shade600,
+                      color: Colors.grey,
                     ),
-                    const SizedBox(width: 4),
                     Text(
                       sample['userName'],
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: Colors.grey.shade800,
                       ),
                     ),
-                    const Spacer(),
                     Text(
                       sample['date'],
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade500,
-                      ),
+                      style: const TextStyle(fontSize: 11, color: Colors.grey),
                     ),
                   ],
                 ),
@@ -459,97 +499,54 @@ class _AdminSampleScreenState extends State<AdminSampleScreen> {
               const SizedBox(height: 16),
             ],
 
-            // Comments Header
-            Row(
-              children: [
-                const Icon(
-                  Icons.mode_comment_outlined,
-                  size: 14,
-                  color: Colors.grey,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  'Comments (${comments.length})',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey,
-                  ),
-                ),
-              ],
+            Text('Email: ${sample['buyerEmail'] ?? ''}'),
+            Text('Buyer address: ${sample['buyerAddress'] ?? ''}'),
+            Text('Seller shop: ${sample['sellerShopName'] ?? ''}'),
+            const SizedBox(height: 12),
+            const Text(
+              'Comments and status history',
+              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
             ),
-            const SizedBox(height: 8),
-
-            // Comments List
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: comments.length,
-              itemBuilder: (context, cIndex) {
-                final comment = comments[cIndex];
-                final bool isAdmin = comment['sender'] == 'Admin';
-
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: isAdmin
-                        ? const Color(0xFFF0F5FF)
-                        : const Color(0xFFF8F9FA),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: isAdmin
-                          ? const Color(0xFFD0E1FF)
-                          : Colors.grey.shade200,
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            comment['sender'],
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: isAdmin
-                                  ? const Color(0xFF0052FF)
-                                  : Colors.black87,
-                            ),
-                          ),
-                          Text(
-                            comment['time'],
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: Colors.grey.shade500,
-                            ),
-                          ),
-                        ],
+            StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: _activityStream(id),
+              builder: (context, snapshot) {
+                if (snapshot.hasError)
+                  return const Text('Unable to load activity.');
+                if (!snapshot.hasData) return const LinearProgressIndicator();
+                if (snapshot.data!.docs.isEmpty)
+                  return const Padding(
+                    padding: EdgeInsets.all(8),
+                    child: Text('No activity yet.'),
+                  );
+                return Column(
+                  children: snapshot.data!.docs.map((doc) {
+                    final d = doc.data();
+                    return Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.symmetric(vertical: 5),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF0F5FF),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        comment['text'],
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey.shade800,
-                          height: 1.3,
-                        ),
+                      child: Text(
+                        '${d['sender'] ?? 'Admin'} • ${_date(d['createdAt'])}\n${d['text'] ?? ''}',
                       ),
-                    ],
-                  ),
+                    );
+                  }).toList(),
                 );
               },
             ),
             const SizedBox(height: 8),
-
             // Add Comment Input Box
             Row(
               children: [
                 Expanded(
                   child: TextField(
-                    controller: _getController(index),
+                    key: ValueKey<String>('sample-comment-$id'),
+                    controller: _getController(id),
+                    readOnly: _busy.contains(id),
+                    maxLength: 5000,
                     style: const TextStyle(fontSize: 13),
                     decoration: InputDecoration(
                       hintText: 'Add internal note or user update...',
@@ -576,7 +573,7 @@ class _AdminSampleScreenState extends State<AdminSampleScreen> {
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton(
-                  onPressed: () => _addComment(index),
+                  onPressed: _busy.contains(id) ? null : () => _addComment(id),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF0052FF),
                     foregroundColor: Colors.white,
@@ -614,9 +611,9 @@ class _AdminSampleScreenState extends State<AdminSampleScreen> {
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: currentStatus == 'Pending'
+                    onPressed: _busy.contains(id) || currentStatus == 'Pending'
                         ? null
-                        : () => _updateAdminStatus(index, 'Pending'),
+                        : () => _updateAdminStatus(id, 'Pending'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.orange.shade800,
                       side: BorderSide(
@@ -638,9 +635,10 @@ class _AdminSampleScreenState extends State<AdminSampleScreen> {
                 const SizedBox(width: 6),
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: currentStatus == 'In Review'
+                    onPressed:
+                        _busy.contains(id) || currentStatus == 'In Review'
                         ? null
-                        : () => _updateAdminStatus(index, 'In Review'),
+                        : () => _updateAdminStatus(id, 'In Review'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.blue.shade800,
                       side: BorderSide(
@@ -662,9 +660,9 @@ class _AdminSampleScreenState extends State<AdminSampleScreen> {
                 const SizedBox(width: 6),
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: currentStatus == 'Approved'
+                    onPressed: _busy.contains(id) || currentStatus == 'Approved'
                         ? null
-                        : () => _updateAdminStatus(index, 'Approved'),
+                        : () => _updateAdminStatus(id, 'Approved'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green,
                       foregroundColor: Colors.white,

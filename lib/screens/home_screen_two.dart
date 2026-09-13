@@ -1,4 +1,6 @@
-import 'package:cartorder/screens/product_details_screen.dart';
+import 'dart:async';
+import 'catalog_support.dart';
+import 'product_details_screen.dart';
 import 'package:flutter/material.dart';
 import 'my_products_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -10,21 +12,106 @@ class HomeScreenTwo extends StatefulWidget {
   State<HomeScreenTwo> createState() => _HomeScreenTwoState();
 }
 
-class _HomeScreenTwoState extends State<HomeScreenTwo> {
+class _HomeScreenTwoState extends State<HomeScreenTwo>
+    with CatalogState<HomeScreenTwo> {
   int _currentBottomIndex = 0;
-  final int _bannerIndex = 0;
+  int _bannerIndex = 0;
+  final PageController _bannerController = PageController();
+  final ScrollController _categoryScrollController = ScrollController();
+  Timer? _bannerTimer;
+  Timer? _categoryTimer;
   final TextEditingController _searchController = TextEditingController();
 
-  final List<Map<String, String>> _categories = [
-    {'name': 'Electrical', 'icon': 'electrical'},
-    {'name': 'Hardware', 'icon': 'hardware'},
-    {'name': 'Lighting', 'icon': 'lighting'},
-    {'name': 'Plumbing', 'icon': 'plumbing'},
-    {'name': 'Sanitary', 'icon': 'sanitary'},
+  String _catalogSearch = '';
+  String? _catalogCategory;
+  List<Map<String, String>> get _categories => [
+    {'name': 'All', 'icon': 'category'},
+    ...catalogCategories.map((name) => {'name': name, 'icon': 'category'}),
+  ];
+  List<Map<String, dynamic>> get _visibleProducts => catalogProducts.where((p) {
+    return p['isActive'] == true &&
+        p['status'] == 'Approved' &&
+        (_catalogCategory == null || p['category'] == _catalogCategory) &&
+        '${p['productName']} ${p['category']} ${p['sellerShopName']} ${p['id']}'
+            .toLowerCase()
+            .contains(_catalogSearch.toLowerCase());
+  }).toList();
+
+  final List<Map<String, String>> _banners = const [
+    {
+      'subtitle': 'Best Quality Products',
+      'title': 'For Your Business',
+      'desc': 'Huge Range | Best Prices | Fast Delivery',
+      'btn': 'Shop Now',
+    },
+    {
+      'subtitle': 'Exclusive Discount',
+      'title': 'Up to 30% Off Electricals',
+      'desc': 'Top Brands | Certified Safety | Wholesale Prices',
+      'btn': 'Explore Offer',
+    },
+    {
+      'subtitle': 'New Arrivals',
+      'title': 'Premium Lighting & Fixtures',
+      'desc': 'Modern Designs | Energy Efficient | Durable Build',
+      'btn': 'View Collection',
+    },
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _startBannerAutoSlider();
+    _startCategoryAutoSlider();
+  }
+
+  void _startBannerAutoSlider() {
+    _bannerTimer = Timer.periodic(const Duration(seconds: 3), (Timer timer) {
+      if (mounted &&
+          (ModalRoute.of(context)?.isCurrent ?? false) &&
+          _bannerController.hasClients &&
+          !_bannerController.position.isScrollingNotifier.value) {
+        int nextIndex = (_bannerIndex + 1) % _banners.length;
+        _bannerController.animateToPage(
+          nextIndex,
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeInOut,
+        );
+      }
+    });
+  }
+
+  void _startCategoryAutoSlider() {
+    _categoryTimer = Timer.periodic(const Duration(seconds: 2), (Timer timer) {
+      if (mounted &&
+          (ModalRoute.of(context)?.isCurrent ?? false) &&
+          _categoryScrollController.hasClients &&
+          !_categoryScrollController.position.isScrollingNotifier.value) {
+        double maxScroll = _categoryScrollController.position.maxScrollExtent;
+        double currentScroll = _categoryScrollController.offset;
+        double targetScroll = (currentScroll + 80.0)
+            .clamp(0.0, maxScroll)
+            .toDouble();
+
+        if (currentScroll >= maxScroll) {
+          targetScroll = 0.0;
+        }
+
+        _categoryScrollController.animateTo(
+          targetScroll,
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeInOut,
+        );
+      }
+    });
+  }
+
+  @override
   void dispose() {
+    _bannerTimer?.cancel();
+    _categoryTimer?.cancel();
+    _bannerController.dispose();
+    _categoryScrollController.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -162,6 +249,8 @@ class _HomeScreenTwoState extends State<HomeScreenTwo> {
                     ],
                   ),
                   child: TextField(
+                    onChanged: (value) =>
+                        setState(() => _catalogSearch = value),
                     controller: _searchController,
                     decoration: InputDecoration(
                       hintText: 'Search Your Products',
@@ -195,172 +284,176 @@ class _HomeScreenTwoState extends State<HomeScreenTwo> {
               SizedBox(
                 height: 90,
                 child: ListView.builder(
+                  controller: _categoryScrollController,
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   itemCount: _categories.length,
                   itemBuilder: (context, index) {
                     final item = _categories[index];
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                      child: Column(
-                        children: [
-                          Container(
-                            width: 56,
-                            height: 56,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFEBF2FF),
-                              shape: BoxShape.circle,
+                    return GestureDetector(
+                      onTap: () => setState(
+                        () => _catalogCategory = item['name'] == 'All'
+                            ? null
+                            : item['name'],
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                        child: Column(
+                          children: [
+                            Container(
+                              width: 56,
+                              height: 56,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFFEBF2FF),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                _getCategoryIcon(item['icon']!),
+                                color: const Color(0xFF0052FF),
+                                size: 26,
+                              ),
                             ),
-                            child: Icon(
-                              _getCategoryIcon(item['icon']!),
-                              color: const Color(0xFF0052FF),
-                              size: 26,
+                            const SizedBox(height: 6),
+                            Text(
+                              item['name']!,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            item['name']!,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     );
                   },
                 ),
               ),
 
-              // Promotional Banner
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16.0,
-                  vertical: 8.0,
-                ),
-                child: Container(
-                  height: 170,
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF0052FF), Color(0xFF0030B8)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
+              // Banner Carousel Auto-Slider Section
+              Column(
+                children: [
+                  SizedBox(
+                    height: 170,
+                    child: PageView.builder(
+                      controller: _bannerController,
+                      itemCount: _banners.length,
+                      onPageChanged: (index) {
+                        setState(() {
+                          _bannerIndex = index;
+                        });
+                      },
+                      itemBuilder: (context, index) {
+                        final banner = _banners[index];
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16.0,
+                            vertical: 4.0,
+                          ),
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(16),
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFF0052FF), Color(0xFF0030B8)],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  banner['subtitle']!,
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  banner['title']!,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  banner['desc']!,
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                                const Spacer(),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ),
-                  child: Stack(
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Best Quality Products',
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 12,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          const Text(
-                            'For Your Business',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          const Text(
-                            'Huge Range | Best Prices | Fast Delivery',
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 11,
-                            ),
-                          ),
-                          const Spacer(),
-                          ElevatedButton(
-                            onPressed: () {},
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.white,
-                              foregroundColor: const Color(0xFF0052FF),
-                              elevation: 0,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 18,
-                                vertical: 8,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            child: const Text(
-                              'Shop Now',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      Positioned(
-                        bottom: 0,
-                        right: 0,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: List.generate(
-                            4,
-                            (index) => Container(
-                              margin: const EdgeInsets.symmetric(horizontal: 2),
-                              width: index == _bannerIndex ? 12 : 6,
-                              height: 6,
-                              decoration: BoxDecoration(
-                                color: index == _bannerIndex
-                                    ? Colors.white
-                                    : Colors.white38,
-                                borderRadius: BorderRadius.circular(3),
-                              ),
-                            ),
-                          ),
+                  const SizedBox(height: 8),
+                  // Banner Indicator Dots
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(
+                      _banners.length,
+                      (index) => AnimatedContainer(
+                        duration: const Duration(milliseconds: 250),
+                        margin: const EdgeInsets.symmetric(horizontal: 3),
+                        width: _bannerIndex == index ? 16 : 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: _bannerIndex == index
+                              ? const Color(0xFF0052FF)
+                              : Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(3),
                         ),
                       ),
-                    ],
+                    ),
                   ),
-                ),
+                ],
               ),
 
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
 
               // Sample Product List
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16.0),
                 child: Column(
                   children: [
-                    _buildProductCard(
-                      title: 'AP 2 Pin Top Avon 3\nParts Heavy Pin H030',
-                      price: '₹ 12.50',
-                      unit: '/Piece',
-                      specs: {
-                        'Current Rating:': '6 A',
-                        'Plug Moulding:': 'Moulded Plug',
-                        'Body Material:': 'Polycarbonate',
-                        'Pin Material:': 'Brass',
-                      },
-                      icon: Icons.power,
-                    ),
-                    const SizedBox(height: 12),
-                    _buildProductCard(
-                      title: 'Finolex FR PVC Insulated\nCopper Wire 1.5 Sqmm',
-                      price: '₹ 45.80',
-                      unit: '/Meter',
-                      specs: {
-                        'Current Rating:': '1100 V',
-                        'Insulation:': 'PVC',
-                        'Conductor:': 'Copper',
-                        'Size:': '1.5 Sqmm',
-                      },
-                      icon: Icons.electrical_services,
+                    if (catalogLoading ||
+                        catalogFailure != null ||
+                        categoryFailure != null)
+                      catalogNotice(),
+                    if (!catalogLoading &&
+                        catalogFailure == null &&
+                        _visibleProducts.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Text('No products found.'),
+                      ),
+                    ..._visibleProducts.map(
+                      (product) => Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _buildProductCard(
+                          productId: product['id'],
+                          imageUrl: product['frontImage'],
+                          title: product['productName'],
+                          price: product['sellingPrice'],
+                          unit: product['unitTypes'],
+                          specs: {
+                            'Category:': product['category'],
+                            'Min quantity:': product['minOrderQuantity'],
+                            'Seller:': product['sellerShopName'],
+                            'Stock:': product['stockStatus'],
+                          },
+                          icon: Icons.inventory_2_outlined,
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 20),
                   ],
@@ -395,7 +488,7 @@ class _HomeScreenTwoState extends State<HomeScreenTwo> {
                       shape: BoxShape.circle,
                     ),
                     child: const Text(
-                      '3',
+                      '•',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 9,
@@ -418,6 +511,8 @@ class _HomeScreenTwoState extends State<HomeScreenTwo> {
   }
 
   Widget _buildProductCard({
+    required String productId,
+    required String imageUrl,
     required String title,
     required String price,
     required String unit,
@@ -449,7 +544,7 @@ class _HomeScreenTwoState extends State<HomeScreenTwo> {
                   color: const Color(0xFFF7F9FC),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(icon, size: 48, color: const Color(0xFF0052FF)),
+                child: catalogImage(imageUrl, width: 100, height: 100),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -516,10 +611,12 @@ class _HomeScreenTwoState extends State<HomeScreenTwo> {
                             Expanded(
                               child: Text(
                                 e.value,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.black87,
+                                  color: e.value == 'Out of Stock'
+                                      ? Colors.red
+                                      : Colors.black87,
                                 ),
                               ),
                             ),
@@ -541,7 +638,8 @@ class _HomeScreenTwoState extends State<HomeScreenTwo> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => const ProductDetailsScreen(),
+                        builder: (context) =>
+                            ProductDetailsScreen(productId: productId),
                       ),
                     );
                   },
@@ -565,7 +663,7 @@ class _HomeScreenTwoState extends State<HomeScreenTwo> {
               const SizedBox(width: 8),
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: () {},
+                  onPressed: null,
                   icon: const Icon(
                     Icons.phone_outlined,
                     size: 16,
@@ -585,6 +683,14 @@ class _HomeScreenTwoState extends State<HomeScreenTwo> {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 4),
+          const Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              'This function is not for sellers.',
+              style: TextStyle(fontSize: 11, color: Colors.grey),
+            ),
           ),
         ],
       ),

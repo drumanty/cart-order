@@ -55,8 +55,9 @@ class _AdminSellersScreenState extends State<AdminSellersScreen> {
                   'status': status,
                 };
               }).toList();
-              if (!_categories.contains(_selectedCategory))
+              if (!_categories.contains(_selectedCategory)) {
                 _selectedCategory = 'All';
+              }
               _loading = false;
               _loadError = null;
             });
