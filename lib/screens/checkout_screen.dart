@@ -40,11 +40,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         _loading = false;
       });
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _error = EstimateService.error(e);
           _loading = false;
         });
+      }
     }
   }
 
@@ -78,7 +79,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         MaterialPageRoute(builder: (_) => const EstimatedOrdersScreen()),
       );
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -86,6 +87,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             ),
           ),
         );
+      }
     } finally {
       if (mounted) setState(() => _submitting = false);
     }

@@ -41,10 +41,11 @@ class _EstimateListViewState extends State<EstimateListView> {
     try {
       await EstimateService.status(id, value);
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(EstimateService.error(e))));
+      }
     } finally {
       if (mounted) setState(() => _busy.remove(id));
     }
@@ -52,10 +53,11 @@ class _EstimateListViewState extends State<EstimateListView> {
 
   Future<void> _copy(String mobile) async {
     await Clipboard.setData(ClipboardData(text: mobile));
-    if (mounted)
+    if (mounted) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Mobile number copied')));
+    }
   }
 
   Color _color(String status) => status == 'Approved'
@@ -81,7 +83,7 @@ class _EstimateListViewState extends State<EstimateListView> {
           : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: _stream,
               builder: (context, snapshot) {
-                if (snapshot.hasError)
+                if (snapshot.hasError) {
                   return const Center(
                     child: Padding(
                       padding: EdgeInsets.all(20),
@@ -90,8 +92,10 @@ class _EstimateListViewState extends State<EstimateListView> {
                       ),
                     ),
                   );
-                if (!snapshot.hasData)
+                }
+                if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
+                }
                 final orders = snapshot.data!.docs.toList();
                 orders.sort((a, b) {
                   final at = a.data()['createdAt'];
@@ -100,13 +104,14 @@ class _EstimateListViewState extends State<EstimateListView> {
                   final bv = bt is Timestamp ? bt.millisecondsSinceEpoch : 0;
                   return bv.compareTo(av);
                 });
-                if (orders.isEmpty)
+                if (orders.isEmpty) {
                   return const Center(
                     child: Text(
                       'No estimated orders found.',
                       style: TextStyle(color: Colors.grey, fontSize: 14),
                     ),
                   );
+                }
                 return ListView.builder(
                   key: const PageStorageKey<String>('estimated-order-list'),
                   padding: const EdgeInsets.all(16),
@@ -335,8 +340,9 @@ class _EstimateListViewState extends State<EstimateListView> {
                     .snapshots(),
               ),
               builder: (context, snapshot) {
-                if (snapshot.hasError)
+                if (snapshot.hasError) {
                   return const Text('Could not load status history.');
+                }
                 if (!snapshot.hasData) return const SizedBox.shrink();
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

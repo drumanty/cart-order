@@ -11,22 +11,82 @@ class AdminSampleScreen extends StatefulWidget {
 }
 
 class _AdminSampleScreenState extends State<AdminSampleScreen> {
-  List<Map<String, dynamic>> _sampleRequests = [];
+  static const List<String> _statuses = ['Pending', 'In Review', 'Approved'];
+
   final _requestsStream = FirebaseFirestore.instance
       .collection('sample_requests')
-      .orderBy('createdAt', descending: true)
       .snapshots();
+
+  final TextEditingController _searchController = TextEditingController();
+  final ScrollController _listController = ScrollController();
+
   final Map<String, TextEditingController> _commentControllers = {};
   final Set<String> _busy = {};
-  // Keep scroll wrappers consistent when expansion and Firestore rebuild.
+
+  final Map<String, Stream<QuerySnapshot<Map<String, dynamic>>>>
+  _activityStreams = {};
+
   static final ScrollBehavior _sampleScrollBehavior =
       const MaterialScrollBehavior().copyWith(
         scrollbars: false,
         overscroll: false,
       );
-  final ScrollController _listController = ScrollController();
-  final Map<String, Stream<QuerySnapshot<Map<String, dynamic>>>>
-  _activityStreams = {};
+
+  String _filter = 'All';
+  String _search = '';
+
+  String _text(dynamic value) => (value ?? '').toString().trim();
+
+  String _normalize(String value) =>
+      value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+
+  String _status(dynamic value) {
+    final normalized = _normalize(
+      _text(value),
+    ).replaceAll(RegExp(r'[_-]+'), ' ');
+
+    switch (normalized) {
+      case '':
+      case 'pending':
+        return 'Pending';
+      case 'in review':
+        return 'In Review';
+      case 'approved':
+        return 'Approved';
+      default:
+        return _text(value);
+    }
+  }
+
+  String _buyerName(Map<String, dynamic> sample) {
+    final name = _text(sample['userName']);
+    return name.isNotEmpty ? name : _text(sample['buyerName']);
+  }
+
+  String _phone(Map<String, dynamic> sample) {
+    final phone = _text(sample['userMobile']);
+    return phone.isNotEmpty ? phone : _text(sample['mobileNumber']);
+  }
+
+  bool _hasCopyValue(String value) =>
+      value.isNotEmpty && value.toLowerCase() != 'not provided';
+
+  String _date(dynamic value) {
+    if (value is Timestamp) {
+      return value.toDate().toLocal().toString().substring(0, 19);
+    }
+
+    final text = _text(value);
+    return text.isEmpty ? 'Pending' : text;
+  }
+
+  int _createdTime(Map<String, dynamic> data) {
+    final value = data['createdAt'];
+    return value is Timestamp ? value.millisecondsSinceEpoch : 0;
+  }
+
+  TextEditingController _getController(String id) =>
+      _commentControllers.putIfAbsent(id, () => TextEditingController());
 
   Stream<QuerySnapshot<Map<String, dynamic>>> _activityStream(String id) =>
       _activityStreams.putIfAbsent(
@@ -38,28 +98,87 @@ class _AdminSampleScreenState extends State<AdminSampleScreen> {
             .orderBy('createdAt')
             .snapshots(),
       );
-  String _date(dynamic v) => v is Timestamp
-      ? v.toDate().toLocal().toString().substring(0, 19)
-      : 'Saving…';
+
   @override
   void dispose() {
-    for (final c in _commentControllers.values) {
-      c.dispose();
-    }
+    _searchController.dispose();
     _listController.dispose();
+
+    for (final controller in _commentControllers.values) {
+      controller.dispose();
+    }
+
     super.dispose();
   }
 
-  TextEditingController _getController(String id) =>
-      _commentControllers.putIfAbsent(id, () => TextEditingController());
+  void _message(String text) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(text)));
+  }
+
+  void _resetScroll() {
+    if (_listController.hasClients) {
+      _listController.jumpTo(0);
+    }
+  }
+
+  void _searchChanged(String value) {
+    _resetScroll();
+
+    setState(() {
+      _search = _normalize(value);
+      // Start each buyer search across every status.
+      _filter = 'All';
+    });
+  }
+
+  bool _matchesSearch(Map<String, dynamic> sample) {
+    if (_search.isEmpty) return true;
+
+    final name = _normalize(_buyerName(sample));
+    final buyerId = _normalize(_text(sample['buyerId']));
+
+    return name.contains(_search) || buyerId.contains(_search);
+  }
+
+  Future<void> _copyToClipboard(String text, String label) async {
+    final value = text.trim();
+
+    if (!_hasCopyValue(value)) {
+      _message('No ${label.toLowerCase()} available.');
+      return;
+    }
+
+    try {
+      await Clipboard.setData(ClipboardData(text: value));
+      if (mounted) _message('$label copied to clipboard.');
+    } catch (_) {
+      if (mounted) {
+        _message('Could not copy ${label.toLowerCase()}.');
+      }
+    }
+  }
 
   Future<void> _addComment(String id) async {
-    final c = _getController(id);
-    final text = c.text.trim();
-    if (text.isEmpty || text.length > 5000 || _busy.contains(id)) return;
+    final controller = _getController(id);
+    final text = controller.text.trim();
+
+    if (text.isEmpty || _busy.contains(id)) return;
+
+    if (text.length > 5000) {
+      _message('Please keep your comment within 5,000 characters.');
+      return;
+    }
+
     setState(() => _busy.add(id));
+
     try {
-      final uid = FirebaseAuth.instance.currentUser!.uid;
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) throw StateError('Please sign in again.');
+
       await FirebaseFirestore.instance
           .collection('sample_requests')
           .doc(id)
@@ -71,31 +190,39 @@ class _AdminSampleScreenState extends State<AdminSampleScreen> {
             'text': text,
             'createdAt': FieldValue.serverTimestamp(),
           });
-      if (mounted && c.text.trim() == text) c.clear();
+
+      if (!mounted) return;
+
+      if (controller.text.trim() == text) controller.clear();
+      _message('Comment posted.');
     } catch (_) {
-      if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not save comment.')),
-        );
+      if (mounted) _message('Could not save comment.');
     } finally {
       if (mounted) setState(() => _busy.remove(id));
     }
   }
 
   Future<void> _updateAdminStatus(String id, String newStatus) async {
-    if (_busy.contains(id)) return;
+    if (_busy.contains(id) || !_statuses.contains(newStatus)) return;
+
     setState(() => _busy.add(id));
+
     try {
-      final uid = FirebaseAuth.instance.currentUser!.uid;
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) throw StateError('Please sign in again.');
+
       final ref = FirebaseFirestore.instance
           .collection('sample_requests')
           .doc(id);
+
       final batch = FirebaseFirestore.instance.batch();
+
       batch.update(ref, {
         'status': newStatus,
         'updatedBy': uid,
         'updatedAt': FieldValue.serverTimestamp(),
       });
+
       batch.set(ref.collection('activity').doc(), {
         'type': 'status',
         'sender': 'Admin',
@@ -103,31 +230,23 @@ class _AdminSampleScreenState extends State<AdminSampleScreen> {
         'text': 'Status changed to $newStatus',
         'createdAt': FieldValue.serverTimestamp(),
       });
+
       await batch.commit();
+
+      if (mounted) _message('Status updated to $newStatus.');
     } catch (_) {
-      if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not save status and history.')),
-        );
+      if (mounted) {
+        _message('Could not save status and history.');
+      }
     } finally {
       if (mounted) setState(() => _busy.remove(id));
     }
   }
 
-  void _copyToClipboard(String text, String label) {
-    Clipboard.setData(ClipboardData(text: text));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$label copied to clipboard'),
-        duration: const Duration(seconds: 1),
-      ),
-    );
-  }
-
   void _showImagePreview(BuildContext context, String imageUrl, String title) {
-    showDialog(
+    showDialog<void>(
       context: context,
-      builder: (context) => Dialog(
+      builder: (dialogContext) => Dialog(
         backgroundColor: Colors.transparent,
         insetPadding: const EdgeInsets.all(16),
         child: Column(
@@ -137,23 +256,25 @@ class _AdminSampleScreenState extends State<AdminSampleScreen> {
               alignment: Alignment.topRight,
               child: IconButton(
                 icon: const Icon(Icons.close, color: Colors.white, size: 28),
-                onPressed: () => Navigator.of(context).pop(),
+                onPressed: () => Navigator.of(dialogContext).pop(),
               ),
             ),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: InteractiveViewer(
-                child: Image.network(
-                  imageUrl,
-                  fit: BoxFit.contain,
-                  errorBuilder: (context, error, stackTrace) => Container(
-                    height: 200,
-                    color: Colors.grey.shade200,
-                    child: const Center(
-                      child: Icon(
-                        Icons.broken_image,
-                        size: 48,
-                        color: Colors.grey,
+            Flexible(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: InteractiveViewer(
+                  child: Image.network(
+                    imageUrl,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => Container(
+                      height: 200,
+                      color: Colors.grey.shade200,
+                      child: const Center(
+                        child: Icon(
+                          Icons.broken_image,
+                          size: 48,
+                          color: Colors.grey,
+                        ),
                       ),
                     ),
                   ),
@@ -163,6 +284,9 @@ class _AdminSampleScreenState extends State<AdminSampleScreen> {
             const SizedBox(height: 8),
             Text(
               title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
               style: const TextStyle(color: Colors.white, fontSize: 14),
             ),
           ],
@@ -172,48 +296,18 @@ class _AdminSampleScreenState extends State<AdminSampleScreen> {
   }
 
   Color _getStatusColor(String status) {
-    switch (status) {
+    switch (_status(status)) {
       case 'Approved':
         return Colors.green;
       case 'In Review':
         return Colors.blue;
-      case 'Pending':
       default:
         return Colors.orange;
     }
   }
 
   @override
-  Widget build(
-    BuildContext context,
-  ) => StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-    stream: _requestsStream,
-    builder: (context, snapshot) {
-      if (snapshot.hasError)
-        return Scaffold(
-          appBar: AppBar(title: const Text('Sample Requests')),
-          body: const Center(
-            child: Text(
-              'Could not load requests. Check Admin access and sample request rules.',
-            ),
-          ),
-        );
-      if (!snapshot.hasData)
-        return const Scaffold(body: Center(child: CircularProgressIndicator()));
-      _sampleRequests = snapshot.data!.docs
-          .map(
-            (doc) => <String, dynamic>{
-              ...doc.data(),
-              'sampleId': doc.id,
-              'date': _date(doc.data()['createdAt']),
-            },
-          )
-          .toList();
-      return _buildScreen(context);
-    },
-  );
-
-  Widget _buildScreen(BuildContext context) {
+  Widget build(BuildContext context) {
     return ScrollConfiguration(
       behavior: _sampleScrollBehavior,
       child: Scaffold(
@@ -224,45 +318,185 @@ class _AdminSampleScreenState extends State<AdminSampleScreen> {
           foregroundColor: Colors.black,
           elevation: 0.5,
         ),
-        body: _sampleRequests.isEmpty
-            ? const Center(
-                child: Text(
-                  'No sample requests found.',
-                  style: TextStyle(color: Colors.grey, fontSize: 14),
+        body: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: TextField(
+                controller: _searchController,
+                onChanged: _searchChanged,
+                decoration: InputDecoration(
+                  labelText: 'Search buyer name or Buyer ID',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _searchController.text.isEmpty
+                      ? null
+                      : IconButton(
+                          tooltip: 'Clear search',
+                          icon: const Icon(Icons.close),
+                          onPressed: () {
+                            _searchController.clear();
+                            _searchChanged('');
+                          },
+                        ),
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: const OutlineInputBorder(),
                 ),
-              )
-            : ListView.builder(
-                key: const PageStorageKey<String>('sample-request-list'),
-                controller: _listController,
-                primary: false,
-                findChildIndexCallback: (key) {
-                  if (key is! ValueKey<String>) return null;
-                  final index = _sampleRequests.indexWhere(
-                    (sample) =>
-                        'sample-card-${sample['sampleId']}' == key.value,
-                  );
-                  return index < 0 ? null : index;
-                },
-                padding: const EdgeInsets.all(16.0),
-                itemCount: _sampleRequests.length,
-                itemBuilder: (context, index) {
-                  final sample = _sampleRequests[index];
-                  return _buildSampleCard(context, sample, index);
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+              child: DropdownButtonFormField<String>(
+                key: ValueKey<String>('sample-filter-$_filter'),
+                value: _filter,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'Filter by status',
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(),
+                ),
+                items: ['All', ..._statuses]
+                    .map(
+                      (status) => DropdownMenuItem<String>(
+                        value: status,
+                        child: Text(status),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  if (value == null) return;
+
+                  _resetScroll();
+                  setState(() => _filter = value);
                 },
               ),
+            ),
+            Expanded(
+              child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                stream: _requestsStream,
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Text(
+                          'Could not load requests. Check your connection, '
+                          'Admin access and sample request rules.',
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    );
+                  }
+
+                  if (!snapshot.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  final allDocs = snapshot.data!.docs;
+
+                  if (allDocs.isEmpty) {
+                    return const Center(
+                      child: Text(
+                        'No sample requests found.',
+                        style: TextStyle(color: Colors.grey, fontSize: 14),
+                      ),
+                    );
+                  }
+
+                  final visible = allDocs.where((doc) {
+                    final sample = doc.data();
+                    final matchesStatus =
+                        _filter == 'All' ||
+                        _status(sample['status']) == _filter;
+
+                    return matchesStatus && _matchesSearch(sample);
+                  }).toList();
+
+                  visible.sort((a, b) {
+                    final comparison = _createdTime(
+                      b.data(),
+                    ).compareTo(_createdTime(a.data()));
+
+                    return comparison == 0 ? a.id.compareTo(b.id) : comparison;
+                  });
+
+                  if (visible.isEmpty) {
+                    return const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Text(
+                          'No sample requests match your search '
+                          'and status filter.',
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    );
+                  }
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Text(
+                          '${visible.length} sample requests found',
+                          style: const TextStyle(
+                            color: Colors.grey,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: ListView.builder(
+                          key: const PageStorageKey<String>(
+                            'sample-request-list',
+                          ),
+                          controller: _listController,
+                          primary: false,
+                          padding: const EdgeInsets.all(16),
+                          itemCount: visible.length,
+                          findChildIndexCallback: (key) {
+                            if (key is! ValueKey<String>) return null;
+
+                            final index = visible.indexWhere(
+                              (doc) => 'sample-card-${doc.id}' == key.value,
+                            );
+
+                            return index < 0 ? null : index;
+                          },
+                          itemBuilder: (context, index) {
+                            final doc = visible[index];
+                            return _buildSampleCard(
+                              context,
+                              doc.id,
+                              doc.data(),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildSampleCard(
     BuildContext context,
+    String id,
     Map<String, dynamic> sample,
-    int index,
   ) {
-    final String currentStatus = sample['status'];
-    final Color statusColor = _getStatusColor(currentStatus);
-    final String id = sample['sampleId'];
-    final String? sampleImageUrl = sample['sampleImageUrl'];
+    final currentStatus = _status(sample['status']);
+    final statusColor = _getStatusColor(currentStatus);
+    final image = _text(sample['sampleImageUrl']);
+    final buyerName = _buyerName(sample);
+    final phone = _phone(sample);
+    final buyerId = _text(sample['buyerId']);
 
     return Container(
       key: ValueKey<String>('sample-card-$id'),
@@ -290,11 +524,10 @@ class _AdminSampleScreenState extends State<AdminSampleScreen> {
             vertical: 8,
           ),
           title: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Expanded(
                 child: Text(
-                  sample['sampleId'],
+                  id,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
@@ -303,6 +536,7 @@ class _AdminSampleScreenState extends State<AdminSampleScreen> {
                   ),
                 ),
               ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
@@ -321,7 +555,7 @@ class _AdminSampleScreenState extends State<AdminSampleScreen> {
             ],
           ),
           subtitle: Padding(
-            padding: const EdgeInsets.only(top: 8.0),
+            padding: const EdgeInsets.only(top: 8),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -336,27 +570,27 @@ class _AdminSampleScreenState extends State<AdminSampleScreen> {
                       color: Colors.grey,
                     ),
                     Text(
-                      sample['userName'],
+                      buyerName.isEmpty ? 'Unknown buyer' : buyerName,
                       style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                     Text(
-                      sample['date'],
+                      _date(sample['createdAt']),
                       style: const TextStyle(fontSize: 11, color: Colors.grey),
                     ),
                   ],
                 ),
                 const SizedBox(height: 6),
                 InkWell(
-                  onTap: () =>
-                      _copyToClipboard(sample['userMobile'], 'Mobile number'),
+                  onTap: _hasCopyValue(phone)
+                      ? () => _copyToClipboard(phone, 'Contact number')
+                      : null,
                   borderRadius: BorderRadius.circular(4),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 2.0),
+                    padding: const EdgeInsets.symmetric(vertical: 4),
                     child: Row(
-                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
                           Icons.phone_outlined,
@@ -364,19 +598,23 @@ class _AdminSampleScreenState extends State<AdminSampleScreen> {
                           color: Colors.grey.shade600,
                         ),
                         const SizedBox(width: 4),
-                        Text(
-                          sample['userMobile'],
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.grey.shade800,
+                        Flexible(
+                          child: Text(
+                            phone.isEmpty ? 'Not provided' : phone,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.grey.shade800,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 6),
-                        const Icon(
+                        Icon(
                           Icons.copy_rounded,
-                          size: 13,
-                          color: Color(0xFF0052FF),
+                          size: 15,
+                          color: _hasCopyValue(phone)
+                              ? const Color(0xFF0052FF)
+                              : Colors.grey,
                         ),
                       ],
                     ),
@@ -391,18 +629,20 @@ class _AdminSampleScreenState extends State<AdminSampleScreen> {
                       color: Colors.grey.shade600,
                     ),
                     const SizedBox(width: 4),
-                    Text(
-                      sample['shopName'],
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey.shade700,
+                    Expanded(
+                      child: Text(
+                        _text(sample['shopName']),
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey.shade700,
+                        ),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  sample['productName'],
+                  _text(sample['productName']),
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
@@ -411,7 +651,7 @@ class _AdminSampleScreenState extends State<AdminSampleScreen> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  sample['productID'],
+                  _text(sample['productID']),
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
@@ -424,9 +664,11 @@ class _AdminSampleScreenState extends State<AdminSampleScreen> {
           children: [
             const Divider(height: 1),
             const SizedBox(height: 12),
+            _copyDetail('Contact number', phone),
+            _copyDetail('Buyer ID', buyerId),
+            const SizedBox(height: 8),
 
-            // Sample Image Preview Section
-            if (sampleImageUrl != null && sampleImageUrl.isNotEmpty) ...[
+            if (image.isNotEmpty) ...[
               const Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
@@ -442,8 +684,8 @@ class _AdminSampleScreenState extends State<AdminSampleScreen> {
               GestureDetector(
                 onTap: () => _showImagePreview(
                   context,
-                  sampleImageUrl,
-                  '${sample['sampleId']} - ${sample['productName']}',
+                  image,
+                  '$id - ${_text(sample['productName'])}',
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(8),
@@ -451,11 +693,11 @@ class _AdminSampleScreenState extends State<AdminSampleScreen> {
                     alignment: Alignment.bottomRight,
                     children: [
                       Image.network(
-                        sampleImageUrl,
+                        image,
                         height: 140,
                         width: double.infinity,
                         fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => Container(
+                        errorBuilder: (_, __, ___) => Container(
                           height: 100,
                           color: Colors.grey.shade200,
                           child: const Center(
@@ -499,9 +741,11 @@ class _AdminSampleScreenState extends State<AdminSampleScreen> {
               const SizedBox(height: 16),
             ],
 
-            Text('Email: ${sample['buyerEmail'] ?? ''}'),
-            Text('Buyer address: ${sample['buyerAddress'] ?? ''}'),
-            Text('Seller shop: ${sample['sellerShopName'] ?? ''}'),
+            _detail('Email', sample['buyerEmail']),
+            _detail('Buyer address', sample['buyerAddress']),
+            _detail('Seller shop', sample['sellerShopName']),
+            if (sample['updatedAt'] != null)
+              _detail('Status updated', _date(sample['updatedAt'])),
             const SizedBox(height: 12),
             const Text(
               'Comments and status history',
@@ -510,17 +754,25 @@ class _AdminSampleScreenState extends State<AdminSampleScreen> {
             StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: _activityStream(id),
               builder: (context, snapshot) {
-                if (snapshot.hasError)
+                if (snapshot.hasError) {
                   return const Text('Unable to load activity.');
-                if (!snapshot.hasData) return const LinearProgressIndicator();
-                if (snapshot.data!.docs.isEmpty)
+                }
+
+                if (!snapshot.hasData) {
+                  return const LinearProgressIndicator();
+                }
+
+                if (snapshot.data!.docs.isEmpty) {
                   return const Padding(
                     padding: EdgeInsets.all(8),
                     child: Text('No activity yet.'),
                   );
+                }
+
                 return Column(
                   children: snapshot.data!.docs.map((doc) {
-                    final d = doc.data();
+                    final data = doc.data();
+
                     return Container(
                       width: double.infinity,
                       margin: const EdgeInsets.symmetric(vertical: 5),
@@ -530,7 +782,8 @@ class _AdminSampleScreenState extends State<AdminSampleScreen> {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
-                        '${d['sender'] ?? 'Admin'} • ${_date(d['createdAt'])}\n${d['text'] ?? ''}',
+                        '${data['sender'] ?? 'Admin'} • '
+                        '${_date(data['createdAt'])}\n${data['text'] ?? ''}',
                       ),
                     );
                   }).toList(),
@@ -538,7 +791,6 @@ class _AdminSampleScreenState extends State<AdminSampleScreen> {
               },
             ),
             const SizedBox(height: 8),
-            // Add Comment Input Box
             Row(
               children: [
                 Expanded(
@@ -590,9 +842,7 @@ class _AdminSampleScreenState extends State<AdminSampleScreen> {
                 ),
               ],
             ),
-
             const SizedBox(height: 16),
-
             const Align(
               alignment: Alignment.centerLeft,
               child: Text(
@@ -605,84 +855,94 @@ class _AdminSampleScreenState extends State<AdminSampleScreen> {
               ),
             ),
             const SizedBox(height: 8),
-
-            // 3 Status Action Buttons
             Row(
               children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: _busy.contains(id) || currentStatus == 'Pending'
-                        ? null
-                        : () => _updateAdminStatus(id, 'Pending'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.orange.shade800,
-                      side: BorderSide(
-                        color: currentStatus == 'Pending'
-                            ? Colors.orange
-                            : Colors.grey.shade300,
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: const Text(
-                      'Pending',
-                      style: TextStyle(fontSize: 11),
-                    ),
-                  ),
-                ),
+                Expanded(child: _statusButton(id, currentStatus, 'Pending')),
                 const SizedBox(width: 6),
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed:
-                        _busy.contains(id) || currentStatus == 'In Review'
-                        ? null
-                        : () => _updateAdminStatus(id, 'In Review'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.blue.shade800,
-                      side: BorderSide(
-                        color: currentStatus == 'In Review'
-                            ? Colors.blue
-                            : Colors.grey.shade300,
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: const Text(
-                      'In Review',
-                      style: TextStyle(fontSize: 11),
-                    ),
-                  ),
-                ),
+                Expanded(child: _statusButton(id, currentStatus, 'In Review')),
                 const SizedBox(width: 6),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: _busy.contains(id) || currentStatus == 'Approved'
-                        ? null
-                        : () => _updateAdminStatus(id, 'Approved'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: const Text(
-                      'Approved',
-                      style: TextStyle(fontSize: 11),
-                    ),
-                  ),
-                ),
+                Expanded(child: _statusButton(id, currentStatus, 'Approved')),
               ],
             ),
             const SizedBox(height: 8),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _statusButton(String id, String current, String target) {
+    final disabled = _busy.contains(id) || current == target;
+
+    if (target == 'Approved') {
+      return ElevatedButton(
+        onPressed: disabled ? null : () => _updateAdminStatus(id, target),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.green,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+        child: Text(target, style: const TextStyle(fontSize: 11)),
+      );
+    }
+
+    final color = _getStatusColor(target);
+
+    return OutlinedButton(
+      onPressed: disabled ? null : () => _updateAdminStatus(id, target),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: color,
+        side: BorderSide(
+          color: current == target ? color : Colors.grey.shade300,
+        ),
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+      child: Text(target, style: const TextStyle(fontSize: 11)),
+    );
+  }
+
+  Widget _copyDetail(String label, String value) {
+    final available = _hasCopyValue(value);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 110,
+            child: Text(
+              label,
+              style: const TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              available ? value : 'Not provided',
+              style: const TextStyle(fontSize: 13),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Copy ${label.toLowerCase()}',
+            icon: const Icon(Icons.copy, size: 18),
+            color: const Color(0xFF0052FF),
+            onPressed: available ? () => _copyToClipboard(value, label) : null,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _detail(String label, dynamic value) {
+    final text = _text(value);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text('$label: ${text.isEmpty ? 'Not provided' : text}'),
       ),
     );
   }

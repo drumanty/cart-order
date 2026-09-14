@@ -51,8 +51,9 @@ class EstimateService {
 
   static int minimum(Map<String, dynamic> p) {
     final n = p['minOrderQuantity'];
-    if (n is! int || n < 1 || n > 1000000)
+    if (n is! int || n < 1 || n > 1000000) {
       throw StateError('Invalid minimum order quantity.');
+    }
     return n;
   }
 
@@ -83,14 +84,16 @@ class EstimateService {
       final ref = cart(buyerId).doc(productId);
       final item = await tx.get(ref);
       final product = await tx.get(db.collection('products').doc(productId));
-      if (!item.exists)
+      if (!item.exists) {
         throw StateError('This item was removed from your cart.');
+      }
       checkProduct(product.data());
       final moq = minimum(product.data()!);
       final old = item.data()!['quantity'] as int;
       final next = old < moq ? moq : old + delta;
-      if (next < moq)
+      if (next < moq) {
         throw StateError('Minimum quantity for this product is $moq.');
+      }
       if (next > 1000000) throw StateError('Maximum quantity is 1,000,000.');
       tx.update(ref, {
         'quantity': next,
@@ -180,8 +183,9 @@ class EstimateService {
   static void validate(List<Map<String, dynamic>> items) {
     if (items.isEmpty) throw StateError('Your cart is empty.');
     for (final item in items) {
-      if (item['available'] != true)
+      if (item['available'] != true) {
         throw StateError('${item['title']} is unavailable. Please remove it.');
+      }
       if ((item['quantity'] as int) < (item['minimumQuantity'] as int)) {
         throw StateError(
           'Update ${item['title']} to its minimum quantity of ${item['minimumQuantity']}.',
@@ -190,10 +194,11 @@ class EstimateService {
     }
     for (final entries in group(items).values) {
       // Each request can be fully validated by Firestore's per-write document-access budget.
-      if (entries.length > 8)
+      if (entries.length > 8) {
         throw StateError(
           'Use up to 8 different products per seller in one estimate.',
         );
+      }
       if (total(entries) < (entries.first['minimumPaise'] as int)) {
         throw StateError(
           '${entries.first['shopName']}: minimum purchase is ${money(entries.first['minimumPaise'] as int)}.',
@@ -212,8 +217,9 @@ class EstimateService {
     final ref = db.collection('estimated_orders').doc(estimateId);
     await db.runTransaction((tx) async {
       final existing = await tx.get(ref);
-      if (existing.exists)
+      if (existing.exists) {
         return; // Same checkout retry cannot create another estimate.
+      }
       final user = await tx.get(db.collection('users').doc(buyerId));
       checkBuyer(user.data());
       final buyer = user.data()!;
@@ -256,10 +262,11 @@ class EstimateService {
         (sum, line) =>
             sum + (line['qty'] as int) * (line['unitPricePaise'] as int),
       );
-      if (totalPaise < minPaise)
+      if (totalPaise < minPaise) {
         throw StateError(
           'This seller now requires ${money(minPaise)}. Refresh your cart.',
         );
+      }
       tx.set(ref, {
         'buyerId': buyerId,
         'buyerFirstName': text(buyer['firstName']),

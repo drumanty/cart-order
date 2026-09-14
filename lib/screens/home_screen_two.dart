@@ -1,9 +1,14 @@
 import 'dart:async';
-import 'catalog_support.dart';
-import 'product_details_screen.dart';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'my_products_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter/services.dart';
+
+import 'catalog_support.dart';
+import 'my_products_screen.dart';
+import 'product_details_screen.dart';
 
 class HomeScreenTwo extends StatefulWidget {
   const HomeScreenTwo({super.key});
@@ -16,26 +21,51 @@ class _HomeScreenTwoState extends State<HomeScreenTwo>
     with CatalogState<HomeScreenTwo> {
   int _currentBottomIndex = 0;
   int _bannerIndex = 0;
+
   final PageController _bannerController = PageController();
   final ScrollController _categoryScrollController = ScrollController();
+  final TextEditingController _searchController = TextEditingController();
+
   Timer? _bannerTimer;
   Timer? _categoryTimer;
-  final TextEditingController _searchController = TextEditingController();
+
+  StreamSubscription<User?>? _authSubscription;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
+  _profileSubscription;
+
+  String? _profileUid;
+  String _userName = '';
+  String _userInitials = '';
+  bool _openingProductForm = false;
 
   String _catalogSearch = '';
   String? _catalogCategory;
+
+  String _text(dynamic value) => (value ?? '').toString();
+
   List<Map<String, String>> get _categories => [
     {'name': 'All', 'icon': 'category'},
     ...catalogCategories.map((name) => {'name': name, 'icon': 'category'}),
   ];
-  List<Map<String, dynamic>> get _visibleProducts => catalogProducts.where((p) {
-    return p['isActive'] == true &&
-        p['status'] == 'Approved' &&
-        (_catalogCategory == null || p['category'] == _catalogCategory) &&
-        '${p['productName']} ${p['category']} ${p['sellerShopName']} ${p['id']}'
-            .toLowerCase()
-            .contains(_catalogSearch.toLowerCase());
-  }).toList();
+
+  List<Map<String, dynamic>> get _visibleProducts {
+    final search = _catalogSearch.trim().toLowerCase();
+
+    return catalogProducts.where((product) {
+      final searchableText =
+          '${product['productName'] ?? ''} '
+                  '${product['category'] ?? ''} '
+                  '${product['sellerShopName'] ?? ''} '
+                  '${product['id'] ?? ''}'
+              .toLowerCase();
+
+      return product['isActive'] == true &&
+          product['status'] == 'Approved' &&
+          (_catalogCategory == null ||
+              product['category'] == _catalogCategory) &&
+          searchableText.contains(search);
+    }).toList();
+  }
 
   final List<Map<String, String>> _banners = const [
     {
@@ -61,55 +91,200 @@ class _HomeScreenTwoState extends State<HomeScreenTwo>
   @override
   void initState() {
     super.initState();
+    _watchUserProfile();
     _startBannerAutoSlider();
     _startCategoryAutoSlider();
   }
 
+  void _watchUserProfile() {
+    _authSubscription = FirebaseAuth.instance.authStateChanges().listen(
+      (user) {
+        _profileSubscription?.cancel();
+        _profileSubscription = null;
+
+        if (!mounted) return;
+
+        setState(() {
+          _profileUid = user?.uid;
+          _userName = '';
+          _userInitials = '';
+        });
+
+        if (user == null) return;
+
+        final uid = user.uid;
+
+        _profileSubscription = FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .snapshots()
+            .listen(
+              (snapshot) {
+                if (!mounted || _profileUid != uid) return;
+
+                final profile = snapshot.data();
+                final firstName = _text(profile?['firstName']).trim();
+                final lastName = _text(profile?['lastName']).trim();
+
+                final nameParts = [
+                  firstName,
+                  lastName,
+                ].where((part) => part.isNotEmpty).toList();
+
+                final initials = nameParts
+                    .map((part) => String.fromCharCode(part.runes.first))
+                    .join()
+                    .toUpperCase();
+
+                setState(() {
+                  _userName = nameParts.join(' ');
+                  _userInitials = initials;
+                });
+              },
+              onError: (Object error) {
+                if (!mounted || _profileUid != uid) return;
+
+                setState(() {
+                  _userName = '';
+                  _userInitials = '';
+                });
+              },
+            );
+      },
+      onError: (Object error) {
+        _profileSubscription?.cancel();
+        _profileSubscription = null;
+
+        if (!mounted) return;
+
+        setState(() {
+          _profileUid = null;
+          _userName = '';
+          _userInitials = '';
+        });
+      },
+    );
+  }
+
   void _startBannerAutoSlider() {
-    _bannerTimer = Timer.periodic(const Duration(seconds: 3), (Timer timer) {
-      if (mounted &&
-          (ModalRoute.of(context)?.isCurrent ?? false) &&
-          _bannerController.hasClients &&
-          !_bannerController.position.isScrollingNotifier.value) {
-        int nextIndex = (_bannerIndex + 1) % _banners.length;
-        _bannerController.animateToPage(
-          nextIndex,
-          duration: const Duration(milliseconds: 400),
-          curve: Curves.easeInOut,
-        );
+    _bannerTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+      if (!mounted ||
+          !(ModalRoute.of(context)?.isCurrent ?? false) ||
+          !_bannerController.hasClients ||
+          _bannerController.position.isScrollingNotifier.value) {
+        return;
       }
+
+      final nextIndex = (_bannerIndex + 1) % _banners.length;
+
+      _bannerController.animateToPage(
+        nextIndex,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOut,
+      );
     });
   }
 
   void _startCategoryAutoSlider() {
-    _categoryTimer = Timer.periodic(const Duration(seconds: 2), (Timer timer) {
-      if (mounted &&
-          (ModalRoute.of(context)?.isCurrent ?? false) &&
-          _categoryScrollController.hasClients &&
-          !_categoryScrollController.position.isScrollingNotifier.value) {
-        double maxScroll = _categoryScrollController.position.maxScrollExtent;
-        double currentScroll = _categoryScrollController.offset;
-        double targetScroll = (currentScroll + 80.0)
-            .clamp(0.0, maxScroll)
-            .toDouble();
-
-        if (currentScroll >= maxScroll) {
-          targetScroll = 0.0;
-        }
-
-        _categoryScrollController.animateTo(
-          targetScroll,
-          duration: const Duration(milliseconds: 500),
-          curve: Curves.easeInOut,
-        );
+    _categoryTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
+      if (!mounted ||
+          !(ModalRoute.of(context)?.isCurrent ?? false) ||
+          !_categoryScrollController.hasClients ||
+          _categoryScrollController.position.isScrollingNotifier.value) {
+        return;
       }
+
+      final maxScroll = _categoryScrollController.position.maxScrollExtent;
+
+      if (maxScroll <= 0) return;
+
+      final currentScroll = _categoryScrollController.offset;
+
+      final targetScroll = currentScroll >= maxScroll - 1
+          ? 0.0
+          : (currentScroll + 80.0).clamp(0.0, maxScroll).toDouble();
+
+      _categoryScrollController.animateTo(
+        targetScroll,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOut,
+      );
     });
+  }
+
+  Future<void> _openAddProductsForm() async {
+    if (_openingProductForm) return;
+
+    const link = 'https://forms.gle/Kj81xvtAtnQuro9s9';
+    final uri = Uri.parse(link);
+
+    setState(() => _openingProductForm = true);
+
+    try {
+      bool opened = false;
+
+      try {
+        opened = await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+      } catch (_) {
+        opened = false;
+      }
+
+      if (!opened) {
+        try {
+          opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+        } catch (_) {
+          opened = false;
+        }
+      }
+
+      if (!mounted || opened) return;
+
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Open Add Products form'),
+          content: const SelectableText(
+            'The form could not open automatically. '
+            'Copy this link and paste it into Chrome:\n\n$link',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Close'),
+            ),
+            TextButton(
+              onPressed: () async {
+                await Clipboard.setData(const ClipboardData(text: link));
+
+                if (!mounted) return;
+                _showMessage('Link copied. Paste it into Chrome.');
+              },
+              child: const Text('Copy link'),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _openingProductForm = false);
+      }
+    }
+  }
+
+  void _showMessage(String text) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(text)));
   }
 
   @override
   void dispose() {
     _bannerTimer?.cancel();
     _categoryTimer?.cancel();
+    _authSubscription?.cancel();
+    _profileSubscription?.cancel();
     _bannerController.dispose();
     _categoryScrollController.dispose();
     _searchController.dispose();
@@ -118,10 +293,9 @@ class _HomeScreenTwoState extends State<HomeScreenTwo>
 
   void _onBottomNavTapped(int index) {
     if (index == 1) {
-      // Navigate to MyProductsScreen when 'My Products' bottom tab is clicked
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (context) => const MyProductsScreen()),
+        MaterialPageRoute(builder: (_) => const MyProductsScreen()),
       );
     } else {
       setState(() {
@@ -132,6 +306,9 @@ class _HomeScreenTwoState extends State<HomeScreenTwo>
 
   @override
   Widget build(BuildContext context) {
+    final categories = _categories;
+    final visibleProducts = _visibleProducts;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF7F9FC),
       body: SafeArea(
@@ -139,41 +316,48 @@ class _HomeScreenTwoState extends State<HomeScreenTwo>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header Section
+              // Header
               Padding(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 16.0,
-                  vertical: 12.0,
+                  horizontal: 16,
+                  vertical: 12,
                 ),
                 child: Row(
                   children: [
-                    const CircleAvatar(
+                    CircleAvatar(
                       radius: 22,
-                      backgroundColor: Color(0xFF0052FF),
-                      child: Text(
-                        'SB',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
+                      backgroundColor: const Color(0xFF0052FF),
+                      child: _userInitials.isEmpty
+                          ? const Icon(
+                              Icons.person_outline,
+                              color: Colors.white,
+                            )
+                          : Text(
+                              _userInitials,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
                     ),
                     const SizedBox(width: 12),
-                    const Expanded(
+                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Hi, Xavier!',
-                            style: TextStyle(
+                            _userName.isEmpty ? 'Hi!' : 'Hi, $_userName!',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
                               color: Colors.black,
                             ),
                           ),
-                          SizedBox(height: 2),
-                          Text(
+                          const SizedBox(height: 2),
+                          const Text(
                             'Welcome to Cart & Order',
                             style: TextStyle(fontSize: 8, color: Colors.grey),
                           ),
@@ -181,34 +365,17 @@ class _HomeScreenTwoState extends State<HomeScreenTwo>
                       ),
                     ),
                     OutlinedButton.icon(
-                      onPressed: () async {
-                        final Uri url = Uri.parse(
-                          'https://forms.gle/Kj81xvtAtnQuro9s9',
-                        );
-
-                        // Check if the URL can be launched, then open it in an external browser
-                        if (await canLaunchUrl(url)) {
-                          await launchUrl(
-                            url,
-                            mode: LaunchMode
-                                .externalApplication, // Opens in external browser app
-                          );
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Could not open the link'),
-                            ),
-                          );
-                        }
-                      },
+                      onPressed: _openingProductForm
+                          ? null
+                          : _openAddProductsForm,
                       icon: const Icon(
                         Icons.add,
                         size: 16,
                         color: Color(0xFF0052FF),
                       ),
-                      label: const Text(
-                        'Add Products',
-                        style: TextStyle(
+                      label: Text(
+                        _openingProductForm ? 'Opening…' : 'Add Products',
+                        style: const TextStyle(
                           fontSize: 12,
                           color: Color(0xFF0052FF),
                           fontWeight: FontWeight.bold,
@@ -233,8 +400,8 @@ class _HomeScreenTwoState extends State<HomeScreenTwo>
               // Search Bar
               Padding(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 16.0,
-                  vertical: 8.0,
+                  horizontal: 16,
+                  vertical: 8,
                 ),
                 child: Container(
                   decoration: BoxDecoration(
@@ -249,9 +416,10 @@ class _HomeScreenTwoState extends State<HomeScreenTwo>
                     ],
                   ),
                   child: TextField(
-                    onChanged: (value) =>
-                        setState(() => _catalogSearch = value),
                     controller: _searchController,
+                    onChanged: (value) {
+                      setState(() => _catalogSearch = value);
+                    },
                     decoration: InputDecoration(
                       hintText: 'Search Your Products',
                       hintStyle: TextStyle(
@@ -266,38 +434,39 @@ class _HomeScreenTwoState extends State<HomeScreenTwo>
                       contentPadding: const EdgeInsets.symmetric(vertical: 14),
                     ),
                     onSubmitted: (value) {
-                      // Navigate to MyProductsScreen with search parameter if needed
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => const MyProductsScreen(),
+                          builder: (_) => const MyProductsScreen(),
                         ),
                       );
                     },
                   ),
                 ),
               ),
-
               const SizedBox(height: 12),
 
-              // Categories Row
+              // Categories
               SizedBox(
                 height: 90,
                 child: ListView.builder(
                   controller: _categoryScrollController,
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 12),
-                  itemCount: _categories.length,
+                  itemCount: categories.length,
                   itemBuilder: (context, index) {
-                    final item = _categories[index];
+                    final item = categories[index];
+
                     return GestureDetector(
-                      onTap: () => setState(
-                        () => _catalogCategory = item['name'] == 'All'
-                            ? null
-                            : item['name'],
-                      ),
+                      onTap: () {
+                        setState(() {
+                          _catalogCategory = item['name'] == 'All'
+                              ? null
+                              : item['name'];
+                        });
+                      },
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
                         child: Column(
                           children: [
                             Container(
@@ -329,7 +498,7 @@ class _HomeScreenTwoState extends State<HomeScreenTwo>
                 ),
               ),
 
-              // Banner Carousel Auto-Slider Section
+              // Banner Carousel
               Column(
                 children: [
                   SizedBox(
@@ -338,16 +507,15 @@ class _HomeScreenTwoState extends State<HomeScreenTwo>
                       controller: _bannerController,
                       itemCount: _banners.length,
                       onPageChanged: (index) {
-                        setState(() {
-                          _bannerIndex = index;
-                        });
+                        setState(() => _bannerIndex = index);
                       },
                       itemBuilder: (context, index) {
                         final banner = _banners[index];
+
                         return Padding(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 16.0,
-                            vertical: 4.0,
+                            horizontal: 16,
+                            vertical: 4,
                           ),
                           child: Container(
                             width: double.infinity,
@@ -396,7 +564,6 @@ class _HomeScreenTwoState extends State<HomeScreenTwo>
                     ),
                   ),
                   const SizedBox(height: 8),
-                  // Banner Indicator Dots
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: List.generate(
@@ -417,12 +584,11 @@ class _HomeScreenTwoState extends State<HomeScreenTwo>
                   ),
                 ],
               ),
-
               const SizedBox(height: 12),
 
-              // Sample Product List
+              // Product List
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Column(
                   children: [
                     if (catalogLoading ||
@@ -431,27 +597,26 @@ class _HomeScreenTwoState extends State<HomeScreenTwo>
                       catalogNotice(),
                     if (!catalogLoading &&
                         catalogFailure == null &&
-                        _visibleProducts.isEmpty)
+                        visibleProducts.isEmpty)
                       const Padding(
                         padding: EdgeInsets.all(24),
                         child: Text('No products found.'),
                       ),
-                    ..._visibleProducts.map(
+                    ...visibleProducts.map(
                       (product) => Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: _buildProductCard(
-                          productId: product['id'],
-                          imageUrl: product['frontImage'],
-                          title: product['productName'],
-                          price: product['sellingPrice'],
-                          unit: product['unitTypes'],
+                          productId: _text(product['id']),
+                          imageUrl: _text(product['frontImage']),
+                          title: _text(product['productName']),
+                          price: _text(product['sellingPrice']),
+                          unit: _text(product['unitTypes']),
                           specs: {
-                            'Category:': product['category'],
-                            'Min quantity:': product['minOrderQuantity'],
-                            'Seller:': product['sellerShopName'],
-                            'Stock:': product['stockStatus'],
+                            'Category:': _text(product['category']),
+                            'Min quantity:': _text(product['minOrderQuantity']),
+                            'Seller:': _text(product['sellerShopName']),
+                            'Stock:': _text(product['stockStatus']),
                           },
-                          icon: Icons.inventory_2_outlined,
                         ),
                       ),
                     ),
@@ -517,7 +682,6 @@ class _HomeScreenTwoState extends State<HomeScreenTwo>
     required String price,
     required String unit,
     required Map<String, String> specs,
-    required IconData icon,
   }) {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -594,14 +758,14 @@ class _HomeScreenTwoState extends State<HomeScreenTwo>
                     ),
                     const SizedBox(height: 6),
                     ...specs.entries.map(
-                      (e) => Padding(
-                        padding: const EdgeInsets.only(bottom: 2.0),
+                      (entry) => Padding(
+                        padding: const EdgeInsets.only(bottom: 2),
                         child: Row(
                           children: [
                             SizedBox(
                               width: 90,
                               child: Text(
-                                e.key,
+                                entry.key,
                                 style: const TextStyle(
                                   fontSize: 11,
                                   color: Colors.grey,
@@ -610,11 +774,11 @@ class _HomeScreenTwoState extends State<HomeScreenTwo>
                             ),
                             Expanded(
                               child: Text(
-                                e.value,
+                                entry.value,
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.bold,
-                                  color: e.value == 'Out of Stock'
+                                  color: entry.value == 'Out of Stock'
                                       ? Colors.red
                                       : Colors.black87,
                                 ),
@@ -638,7 +802,7 @@ class _HomeScreenTwoState extends State<HomeScreenTwo>
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) =>
+                        builder: (_) =>
                             ProductDetailsScreen(productId: productId),
                       ),
                     );

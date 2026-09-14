@@ -502,19 +502,23 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         width: double.infinity,
                         height: 50,
                         child: ElevatedButton(
-                          onPressed: _handleSignUp,
+                          onPressed: _isTermsAccepted ? _handleSignUp : null,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF0052FF),
+                            disabledBackgroundColor: Colors.grey.shade300,
+                            disabledForegroundColor: Colors.grey.shade700,
                             elevation: 0,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                          child: const Text(
-                            'Create Account',
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: Colors.white,
+                          child: Text(
+                            _isTermsAccepted
+                                ? 'Create Account'
+                                : 'Please select Terms & Conditions',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 14,
                               fontWeight: FontWeight.w600,
                             ),
                           ),

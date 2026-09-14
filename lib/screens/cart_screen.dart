@@ -35,11 +35,12 @@ class _CartScreenState extends State<CartScreen> {
           .listen(
             (_) => _refresh(),
             onError: (Object e) {
-              if (mounted)
+              if (mounted) {
                 setState(() {
                   _error = EstimateService.error(e);
                   _loading = false;
                 });
+              }
             },
           );
     } catch (e) {
@@ -58,18 +59,20 @@ class _CartScreenState extends State<CartScreen> {
     final version = ++_loadVersion;
     try {
       final items = await EstimateService.loadCart(EstimateService.uid);
-      if (mounted && version == _loadVersion)
+      if (mounted && version == _loadVersion) {
         setState(() {
           _cartItems = items;
           _loading = false;
           _error = null;
         });
+      }
     } catch (e) {
-      if (mounted && version == _loadVersion)
+      if (mounted && version == _loadVersion) {
         setState(() {
           _error = EstimateService.error(e);
           _loading = false;
         });
+      }
     }
   }
 
@@ -80,10 +83,11 @@ class _CartScreenState extends State<CartScreen> {
       await action();
       await _refresh();
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(EstimateService.error(e))));
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -111,10 +115,11 @@ class _CartScreenState extends State<CartScreen> {
       );
       if (mounted) await _refresh();
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(EstimateService.error(e))));
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }

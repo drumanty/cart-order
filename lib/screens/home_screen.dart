@@ -1,8 +1,10 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'catalog_support.dart';
-import 'dart:async';
 import 'package:flutter/material.dart';
+
+import 'catalog_support.dart';
 import 'product_details_screen.dart';
 import 'estimated_order_screen.dart';
 import 'upload_query_screen.dart';
@@ -26,20 +28,37 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
   Timer? _bannerTimer;
   Timer? _categoryTimer;
 
+  StreamSubscription<User?>? _authSubscription;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
+  _profileSubscription;
+
+  String? _profileUid;
+  String _buyerName = '';
+  String _buyerInitials = '';
+
   String _catalogSearch = '';
   String? _catalogCategory;
+
+  String _text(dynamic value) => (value ?? '').toString();
+
   List<Map<String, String>> get _categories => [
     {'name': 'All', 'icon': 'category'},
     ...catalogCategories.map((name) => {'name': name, 'icon': 'category'}),
   ];
-  List<Map<String, dynamic>> get _visibleProducts => catalogProducts.where((p) {
-    return p['isActive'] == true &&
-        p['status'] == 'Approved' &&
-        (_catalogCategory == null || p['category'] == _catalogCategory) &&
-        '${p['productName']} ${p['category']} ${p['sellerShopName']} ${p['id']}'
-            .toLowerCase()
-            .contains(_catalogSearch.toLowerCase());
-  }).toList();
+
+  List<Map<String, dynamic>> get _visibleProducts {
+    return catalogProducts.where((product) {
+      final searchableText =
+          '${product['productName']} ${product['category']} '
+          '${product['sellerShopName']} ${product['id']}';
+
+      return product['isActive'] == true &&
+          product['status'] == 'Approved' &&
+          (_catalogCategory == null ||
+              product['category'] == _catalogCategory) &&
+          searchableText.toLowerCase().contains(_catalogSearch.toLowerCase());
+    }).toList();
+  }
 
   final List<Map<String, String>> _banners = const [
     {
@@ -65,47 +84,131 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _watchBuyerProfile();
     _startBannerAutoSlider();
     _startCategoryAutoSlider();
   }
 
+  void _watchBuyerProfile() {
+    _authSubscription = FirebaseAuth.instance.authStateChanges().listen(
+      (user) {
+        _profileSubscription?.cancel();
+        _profileSubscription = null;
+
+        if (!mounted) return;
+
+        setState(() {
+          _profileUid = user?.uid;
+          _buyerName = '';
+          _buyerInitials = '';
+        });
+
+        if (user == null) return;
+
+        final uid = user.uid;
+
+        _profileSubscription = FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .snapshots()
+            .listen(
+              (snapshot) {
+                if (!mounted || _profileUid != uid) return;
+
+                final profile = snapshot.data();
+                final firstName = _text(profile?['firstName']).trim();
+                final lastName = _text(profile?['lastName']).trim();
+
+                final parts = [
+                  firstName,
+                  lastName,
+                ].where((part) => part.isNotEmpty).toList();
+
+                final initials = parts
+                    .map((part) => String.fromCharCode(part.runes.first))
+                    .join()
+                    .toUpperCase();
+
+                setState(() {
+                  _buyerName = parts.join(' ');
+                  _buyerInitials = initials;
+                });
+              },
+              onError: (Object error) {
+                if (!mounted || _profileUid != uid) return;
+
+                setState(() {
+                  _buyerName = '';
+                  _buyerInitials = '';
+                });
+              },
+            );
+      },
+      onError: (Object error) {
+        _profileSubscription?.cancel();
+        _profileSubscription = null;
+
+        if (!mounted) return;
+
+        setState(() {
+          _profileUid = null;
+          _buyerName = '';
+          _buyerInitials = '';
+        });
+      },
+    );
+  }
+
   void _startBannerAutoSlider() {
-    _bannerTimer = Timer.periodic(const Duration(seconds: 3), (Timer timer) {
-      if (_bannerController.hasClients) {
-        int nextIndex = (_bannerIndex + 1) % _banners.length;
-        _bannerController.animateToPage(
-          nextIndex,
-          duration: const Duration(milliseconds: 400),
-          curve: Curves.easeInOut,
-        );
+    _bannerTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+      if (!mounted ||
+          !(ModalRoute.of(context)?.isCurrent ?? false) ||
+          !_bannerController.hasClients ||
+          _bannerController.position.isScrollingNotifier.value) {
+        return;
       }
+
+      final nextIndex = (_bannerIndex + 1) % _banners.length;
+
+      _bannerController.animateToPage(
+        nextIndex,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOut,
+      );
     });
   }
 
   void _startCategoryAutoSlider() {
-    _categoryTimer = Timer.periodic(const Duration(seconds: 2), (Timer timer) {
-      if (_categoryScrollController.hasClients) {
-        double maxScroll = _categoryScrollController.position.maxScrollExtent;
-        double currentScroll = _categoryScrollController.offset;
-        double targetScroll = (currentScroll + 80.0)
-            .clamp(0.0, maxScroll)
-            .toDouble();
-
-        if (currentScroll >= maxScroll) {
-          targetScroll = 0.0;
-        }
-
-        _categoryScrollController.animateTo(
-          targetScroll,
-          duration: const Duration(milliseconds: 500),
-          curve: Curves.easeInOut,
-        );
+    _categoryTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
+      if (!mounted ||
+          !(ModalRoute.of(context)?.isCurrent ?? false) ||
+          !_categoryScrollController.hasClients ||
+          _categoryScrollController.position.isScrollingNotifier.value) {
+        return;
       }
+
+      final maxScroll = _categoryScrollController.position.maxScrollExtent;
+
+      if (maxScroll <= 0) return;
+
+      final currentScroll = _categoryScrollController.offset;
+
+      final targetScroll = currentScroll >= maxScroll - 1
+          ? 0.0
+          : (currentScroll + 80.0).clamp(0.0, maxScroll).toDouble();
+
+      _categoryScrollController.animateTo(
+        targetScroll,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOut,
+      );
     });
   }
 
   @override
   void dispose() {
+    _authSubscription?.cancel();
+    _profileSubscription?.cancel();
     _bannerTimer?.cancel();
     _categoryTimer?.cancel();
     _bannerController.dispose();
@@ -117,23 +220,24 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
     if (index == 1) {
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (context) => const CartScreen()),
+        MaterialPageRoute(builder: (_) => const CartScreen()),
       );
     } else if (index == 2) {
-      // Navigate to Profile Details Screen
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (context) => const ProfileDetailsScreen()),
+        MaterialPageRoute(builder: (_) => const ProfileDetailsScreen()),
       );
     } else {
-      setState(() {
-        _currentBottomIndex = index;
-      });
+      // Retains the original bottom-tab behavior.
+      setState(() => _currentBottomIndex = index);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final categories = _categories;
+    final visibleProducts = _visibleProducts;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF7F9FC),
       body: SafeArea(
@@ -141,41 +245,48 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header Section
+              // Header
               Padding(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 16.0,
-                  vertical: 12.0,
+                  horizontal: 16,
+                  vertical: 12,
                 ),
                 child: Row(
                   children: [
-                    const CircleAvatar(
+                    CircleAvatar(
                       radius: 22,
-                      backgroundColor: Color(0xFF0052FF),
-                      child: Text(
-                        'SB',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
+                      backgroundColor: const Color(0xFF0052FF),
+                      child: _buyerInitials.isEmpty
+                          ? const Icon(
+                              Icons.person_outline,
+                              color: Colors.white,
+                            )
+                          : Text(
+                              _buyerInitials,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
                     ),
                     const SizedBox(width: 12),
-                    const Expanded(
+                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Hi, Xavier!',
-                            style: TextStyle(
+                            _buyerName.isEmpty ? 'Hi!' : 'Hi, $_buyerName!',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
                               color: Colors.black,
                             ),
                           ),
-                          SizedBox(height: 2),
-                          Text(
+                          const SizedBox(height: 2),
+                          const Text(
                             'Welcome to Cart & Order',
                             style: TextStyle(fontSize: 8, color: Colors.grey),
                           ),
@@ -187,7 +298,7 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => const EstimatedOrdersScreen(),
+                            builder: (_) => const EstimatedOrdersScreen(),
                           ),
                         );
                       },
@@ -219,11 +330,11 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
                 ),
               ),
 
-              // Search Bar & Upload Action
+              // Search and Upload Query
               Padding(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 16.0,
-                  vertical: 8.0,
+                  horizontal: 16,
+                  vertical: 8,
                 ),
                 child: Row(
                   children: [
@@ -241,8 +352,9 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
                           ],
                         ),
                         child: TextField(
-                          onChanged: (value) =>
-                              setState(() => _catalogSearch = value),
+                          onChanged: (value) {
+                            setState(() => _catalogSearch = value);
+                          },
                           decoration: InputDecoration(
                             hintText: 'Search Your Products',
                             hintStyle: TextStyle(
@@ -286,7 +398,7 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => const UploadQueryScreen(),
+                              builder: (_) => const UploadQueryScreen(),
                             ),
                           );
                         },
@@ -295,10 +407,9 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
                   ],
                 ),
               ),
-
               const SizedBox(height: 12),
 
-              // Category Auto-Scrolling Horizontal Slider
+              // Categories
               SizedBox(
                 height: 95,
                 child: ListView.builder(
@@ -306,17 +417,20 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
                   scrollDirection: Axis.horizontal,
                   physics: const BouncingScrollPhysics(),
                   padding: const EdgeInsets.symmetric(horizontal: 12),
-                  itemCount: _categories.length,
+                  itemCount: categories.length,
                   itemBuilder: (context, index) {
-                    final item = _categories[index];
+                    final item = categories[index];
+
                     return GestureDetector(
-                      onTap: () => setState(
-                        () => _catalogCategory = item['name'] == 'All'
-                            ? null
-                            : item['name'],
-                      ),
+                      onTap: () {
+                        setState(() {
+                          _catalogCategory = item['name'] == 'All'
+                              ? null
+                              : item['name'];
+                        });
+                      },
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
                         child: Column(
                           children: [
                             Container(
@@ -348,7 +462,7 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
                 ),
               ),
 
-              // Banner Carousel Auto-Slider Section
+              // Banner Carousel
               Column(
                 children: [
                   SizedBox(
@@ -357,16 +471,15 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
                       controller: _bannerController,
                       itemCount: _banners.length,
                       onPageChanged: (index) {
-                        setState(() {
-                          _bannerIndex = index;
-                        });
+                        setState(() => _bannerIndex = index);
                       },
                       itemBuilder: (context, index) {
                         final banner = _banners[index];
+
                         return Padding(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 16.0,
-                            vertical: 4.0,
+                            horizontal: 16,
+                            vertical: 4,
                           ),
                           child: Container(
                             width: double.infinity,
@@ -415,7 +528,6 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  // Banner Indicator Dots
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: List.generate(
@@ -436,12 +548,11 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
                   ),
                 ],
               ),
-
               const SizedBox(height: 12),
 
-              // Product List Section
+              // Products
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Column(
                   children: [
                     if (catalogLoading ||
@@ -450,27 +561,26 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
                       catalogNotice(),
                     if (!catalogLoading &&
                         catalogFailure == null &&
-                        _visibleProducts.isEmpty)
+                        visibleProducts.isEmpty)
                       const Padding(
                         padding: EdgeInsets.all(24),
                         child: Text('No products found.'),
                       ),
-                    ..._visibleProducts.map(
+                    ...visibleProducts.map(
                       (product) => Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: _buildProductCard(
-                          productId: product['id'],
-                          imageUrl: product['frontImage'],
-                          title: product['productName'],
-                          price: product['sellingPrice'],
-                          unit: product['unitTypes'],
+                          productId: _text(product['id']),
+                          imageUrl: _text(product['frontImage']),
+                          title: _text(product['productName']),
+                          price: _text(product['sellingPrice']),
+                          unit: _text(product['unitTypes']),
                           specs: {
-                            'Category:': product['category'],
-                            'Min quantity:': product['minOrderQuantity'],
-                            'Seller:': product['sellerShopName'],
-                            'Stock:': product['stockStatus'],
+                            'Category:': _text(product['category']),
+                            'Min quantity:': _text(product['minOrderQuantity']),
+                            'Seller:': _text(product['sellerShopName']),
+                            'Stock:': _text(product['stockStatus']),
                           },
-                          icon: Icons.inventory_2_outlined,
                         ),
                       ),
                     ),
@@ -540,7 +650,6 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
     required String price,
     required String unit,
     required Map<String, String> specs,
-    required IconData icon,
   }) {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -617,14 +726,14 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
                     ),
                     const SizedBox(height: 6),
                     ...specs.entries.map(
-                      (e) => Padding(
-                        padding: const EdgeInsets.only(bottom: 2.0),
+                      (entry) => Padding(
+                        padding: const EdgeInsets.only(bottom: 2),
                         child: Row(
                           children: [
                             SizedBox(
                               width: 90,
                               child: Text(
-                                e.key,
+                                entry.key,
                                 style: const TextStyle(
                                   fontSize: 11,
                                   color: Colors.grey,
@@ -633,11 +742,11 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
                             ),
                             Expanded(
                               child: Text(
-                                e.value,
+                                entry.value,
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.bold,
-                                  color: e.value == 'Out of Stock'
+                                  color: entry.value == 'Out of Stock'
                                       ? Colors.red
                                       : Colors.black87,
                                 ),
@@ -661,7 +770,7 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) =>
+                        builder: (_) =>
                             ProductDetailsScreen(productId: productId),
                       ),
                     );
@@ -723,6 +832,7 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
   }) async {
     try {
       final user = FirebaseAuth.instance.currentUser;
+
       if (user == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -731,11 +841,14 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
         }
         return;
       }
+
       final profile = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
           .get();
+
       final data = profile.data() ?? <String, dynamic>{};
+
       if (data['userType'] != 'Buyer' || data['accountStatus'] != 'approved') {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -746,21 +859,24 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
         }
         return;
       }
+
       await FirebaseFirestore.instance.collection('enquiries').add({
         'buyerId': user.uid,
         'buyerName': '${data['firstName'] ?? ''} ${data['lastName'] ?? ''}'
             .trim(),
         'buyerEmail': user.email ?? '',
-        'mobileNumber': (data['mobileNumber'] ?? '').toString(),
-        'buyerAddress': (data['shopAddress'] ?? '').toString(),
-        'shopName': (data['shopName'] ?? '').toString(),
+        'mobileNumber': _text(data['mobileNumber']),
+        'buyerAddress': _text(data['shopAddress']),
+        'shopName': _text(data['shopName']),
         'productId': productId,
         'productName': productName,
         'productImage': imageUrl,
         'status': 'submitted',
         'createdAt': FieldValue.serverTimestamp(),
       });
+
       if (!mounted) return;
+
       await showDialog<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(

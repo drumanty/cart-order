@@ -32,10 +32,11 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
         MaterialPageRoute(builder: (_) => const CartScreen()),
       );
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(EstimateService.error(e))));
+      }
     } finally {
       if (mounted) setState(() => _addingToCart = false);
     }
@@ -49,22 +50,26 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
     try {
       final user = FirebaseAuth.instance.currentUser;
       final productId = widget.productId;
-      if (user == null || productId == null)
+      if (user == null || productId == null) {
         throw StateError('Please sign in as a Buyer.');
+      }
       final profile = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
           .get();
       final buyer = profile.data() ?? <String, dynamic>{};
-      if (buyer['userType'] != 'Buyer' || buyer['accountStatus'] != 'approved')
+      if (buyer['userType'] != 'Buyer' ||
+          buyer['accountStatus'] != 'approved') {
         throw StateError('Only approved Buyers can request samples.');
+      }
       final product = await FirebaseFirestore.instance
           .collection('products')
           .doc(productId)
           .get();
       final p = product.data();
-      if (p == null || p['isActive'] != true || p['status'] != 'Approved')
+      if (p == null || p['isActive'] != true || p['status'] != 'Approved') {
         throw StateError('This product is no longer available.');
+      }
       await FirebaseFirestore.instance.collection('sample_requests').add({
         'buyerId': user.uid,
         'userName': '${buyer['firstName'] ?? ''} ${buyer['lastName'] ?? ''}'
@@ -99,7 +104,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
         ),
       );
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -109,6 +114,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
             ),
           ),
         );
+      }
     } finally {
       if (mounted) setState(() => _sendingSample = false);
     }
