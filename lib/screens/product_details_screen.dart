@@ -1,3 +1,5 @@
+import 'estimate_service.dart';
+import 'cart_screen.dart';
 import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'shop_settings.dart';
@@ -16,6 +18,29 @@ class ProductDetailsScreen extends StatefulWidget {
 class _ProductDetailsScreenState extends State<ProductDetailsScreen>
     with TickerProviderStateMixin, CatalogState<ProductDetailsScreen> {
   int _selectedImageIndex = 0;
+  bool _addingToCart = false;
+  Future<void> _addToCart() async {
+    if (!_canUseBuyerActions || _addingToCart) return;
+    final id = widget.productId;
+    if (id == null) return;
+    setState(() => _addingToCart = true);
+    try {
+      await EstimateService.addProduct(id);
+      if (!mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const CartScreen()),
+      );
+    } catch (e) {
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(EstimateService.error(e))));
+    } finally {
+      if (mounted) setState(() => _addingToCart = false);
+    }
+  }
+
   bool _sendingSample = false;
   bool _sampleSent = false;
   Future<void> _requestSample() async {
@@ -707,8 +732,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                           onPressed:
                               _canUseBuyerActions &&
                                   _product['inStock'] == true &&
-                                  _product['isActive'] == true
-                              ? () => catalogComingSoon(context, 'Cart')
+                                  _product['isActive'] == true &&
+                                  !_addingToCart
+                              ? _addToCart
                               : null,
                           style: ElevatedButton.styleFrom(
                             padding: EdgeInsets.symmetric(vertical: 14),
@@ -728,7 +754,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                               ),
                               SizedBox(width: 6),
                               Text(
-                                'Add to Cart',
+                                _addingToCart ? 'Adding…' : 'Add to Cart',
                                 style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.bold,
