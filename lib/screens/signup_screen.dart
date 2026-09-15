@@ -1,7 +1,8 @@
-import 'package:flutter/material.dart';
-import 'auth_navigation.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+
+import 'auth_navigation.dart';
 import 'login_screen.dart';
 
 class SignUpScreen extends StatefulWidget {
@@ -23,32 +24,26 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _shopNameController = TextEditingController();
   final _gstPanController = TextEditingController();
   final _shopAddressController = TextEditingController();
-  final _businessCategoryController = TextEditingController();
+
+  String _userType = 'Buyer';
+  String? _businessCategory;
 
   bool _isTermsAccepted = false;
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
 
-  // User Type Selection
-  String _userType = 'Buyer'; // Default value
-
   @override
   void dispose() {
-    for (final controller in [
-      _firstNameController,
-      _lastNameController,
-      _emailController,
-      _mobileController,
-      _passwordController,
-      _confirmPasswordController,
-      _shopNameController,
-      _gstPanController,
-      _shopAddressController,
-      _businessCategoryController,
-    ]) {
-      controller.dispose();
-    }
+    _firstNameController.dispose();
+    _lastNameController.dispose();
+    _emailController.dispose();
+    _mobileController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    _shopNameController.dispose();
+    _gstPanController.dispose();
+    _shopAddressController.dispose();
     super.dispose();
   }
 
@@ -63,7 +58,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   Future<void> _handleSignUp() async {
-    if (_isLoading || !_formKey.currentState!.validate()) return;
+    if (_isLoading) return;
+
     if (!_isTermsAccepted) {
       showAuthError(
         context,
@@ -71,11 +67,24 @@ class _SignUpScreenState extends State<SignUpScreen> {
       );
       return;
     }
+
+    if (!_formKey.currentState!.validate()) return;
+
+    if (_businessCategory == null || _businessCategory!.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a Business Category.')),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
+
     try {
       final email = _emailController.text.trim();
       final password = _passwordController.text;
+
       UserCredential credential;
+
       try {
         credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
           email: email,
@@ -83,22 +92,33 @@ class _SignUpScreenState extends State<SignUpScreen> {
         );
       } on FirebaseAuthException catch (error) {
         if (error.code != 'email-already-in-use') rethrow;
-        // Authenticate ownership before recovering a partially created account.
+
         credential = await FirebaseAuth.instance.signInWithEmailAndPassword(
           email: email,
           password: password,
         );
       }
+
       final user = credential.user;
-      if (user == null) throw StateError('No authenticated user was returned.');
-      final ref = FirebaseFirestore.instance.collection('users').doc(user.uid);
-      final existing = await ref.get(const GetOptions(source: Source.server));
-      if (!existing.exists) {
-        // Transaction prevents retries from overwriting an existing profile.
+
+      if (user == null) {
+        throw StateError('No authenticated user was returned.');
+      }
+
+      final userRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid);
+
+      final existingProfile = await userRef.get(
+        const GetOptions(source: Source.server),
+      );
+
+      if (!existingProfile.exists) {
         await FirebaseFirestore.instance.runTransaction((transaction) async {
-          final latest = await transaction.get(ref);
-          if (!latest.exists) {
-            transaction.set(ref, {
+          final latestProfile = await transaction.get(userRef);
+
+          if (!latestProfile.exists) {
+            transaction.set(userRef, {
               'uid': user.uid,
               'firstName': _firstNameController.text.trim(),
               'lastName': _lastNameController.text.trim(),
@@ -106,39 +126,48 @@ class _SignUpScreenState extends State<SignUpScreen> {
               'mobileNumber': _mobileController.text.trim(),
               'userType': _userType,
               'shopName': _shopNameController.text.trim(),
-              'businessCategory': _businessCategoryController.text.trim(),
+              'businessCategory': _businessCategory!.trim(),
               'gstPanNumber': _gstPanController.text.trim(),
               'shopAddress': _shopAddressController.text.trim(),
               'photoUrl': null,
               'photoPath': null,
-              'accountStatus': 'pending',
               'termsAccepted': true,
               'termsAcceptedAt': FieldValue.serverTimestamp(),
               'createdAt': FieldValue.serverTimestamp(),
+              'accountStatus': 'pending',
             });
           }
         });
       }
+
       if (!mounted) return;
+
       await FirebaseAuth.instance.signOut();
+
       if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            existing.exists
-                ? 'Account already exists. Please log in; admin approval is required.'
-                : 'Account submitted. Please wait for admin approval before logging in.',
+            existingProfile.exists
+                ? 'Account already exists. Please log in; Admin approval is required.'
+                : 'Account submitted. Please wait for Admin approval before logging in.',
           ),
         ),
       );
+
       Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const LoginScreen()),
         (_) => false,
       );
     } catch (error) {
-      if (mounted) showAuthError(context, error);
+      if (mounted) {
+        showAuthError(context, error);
+      }
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -150,7 +179,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Form(
                   key: _formKey,
                   child: Column(
@@ -165,14 +194,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       ),
                       const SizedBox(height: 15),
 
-                      // Header with Graphic Illustration
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
+                          const Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
-                              children: const [
+                              children: [
                                 Text(
                                   'Create Account',
                                   style: TextStyle(
@@ -196,18 +224,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           Container(
                             width: 130,
                             height: 130,
-                            color: Colors.transparent,
-                            child: Padding(
-                              padding: const EdgeInsets.all(4.0),
-                              child: Image.asset(
-                                'assets/model.png',
-                                fit: BoxFit.contain,
-                                errorBuilder: (context, error, stackTrace) =>
-                                    const Icon(
-                                      Icons.person,
-                                      size: 80,
-                                      color: Colors.grey,
-                                    ),
+                            padding: const EdgeInsets.all(4),
+                            child: Image.asset(
+                              'assets/model.png',
+                              fit: BoxFit.contain,
+                              errorBuilder: (_, __, ___) => const Icon(
+                                Icons.person,
+                                size: 80,
+                                color: Colors.grey,
                               ),
                             ),
                           ),
@@ -215,16 +239,15 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       ),
                       const SizedBox(height: 20),
 
-                      // Profile / Shop Photo Upload
                       Center(
                         child: GestureDetector(
                           onTap: _pickImage,
                           child: Stack(
                             children: [
-                              CircleAvatar(
+                              const CircleAvatar(
                                 radius: 42,
-                                backgroundColor: const Color(0xFFEBF2FF),
-                                child: const Icon(
+                                backgroundColor: Color(0xFFEBF2FF),
+                                child: Icon(
                                   Icons.add_a_photo_outlined,
                                   size: 32,
                                   color: Color(0xFF0052FF),
@@ -252,7 +275,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       ),
                       const SizedBox(height: 20),
 
-                      // User Type Selection (Buyer / Seller)
                       const Text(
                         'Select Account Type:',
                         style: TextStyle(
@@ -262,6 +284,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         ),
                       ),
                       const SizedBox(height: 6),
+
                       Row(
                         children: [
                           Expanded(
@@ -274,7 +297,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                               activeColor: const Color(0xFF0052FF),
                               controlAffinity: ListTileControlAffinity.leading,
                               contentPadding: EdgeInsets.zero,
-                              onChanged: (bool? value) {
+                              onChanged: (value) {
                                 if (value == true) {
                                   setState(() => _userType = 'Buyer');
                                 }
@@ -291,7 +314,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                               activeColor: const Color(0xFF0052FF),
                               controlAffinity: ListTileControlAffinity.leading,
                               contentPadding: EdgeInsets.zero,
-                              onChanged: (bool? value) {
+                              onChanged: (value) {
                                 if (value == true) {
                                   setState(() => _userType = 'Seller');
                                 }
@@ -302,7 +325,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       ),
                       const SizedBox(height: 10),
 
-                      // First Name & Last Name
                       Row(
                         children: [
                           Expanded(
@@ -324,7 +346,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       ),
                       const SizedBox(height: 14),
 
-                      // Shop Name
                       _buildInputField(
                         controller: _shopNameController,
                         hintText: 'Shop Name',
@@ -332,15 +353,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       ),
                       const SizedBox(height: 14),
 
-                      // Business Category
-                      _buildInputField(
-                        controller: _businessCategoryController,
-                        hintText: 'Business Category',
-                        icon: Icons.category_outlined,
-                      ),
+                      _buildBusinessCategoryDropdown(),
                       const SizedBox(height: 14),
 
-                      // GSTIN / PAN Card
                       _buildInputField(
                         controller: _gstPanController,
                         hintText: 'GSTIN / PAN Card',
@@ -348,7 +363,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       ),
                       const SizedBox(height: 14),
 
-                      // Shop Address
                       _buildInputField(
                         controller: _shopAddressController,
                         hintText: 'Shop Address',
@@ -356,7 +370,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       ),
                       const SizedBox(height: 14),
 
-                      // Email Address
                       _buildInputField(
                         controller: _emailController,
                         hintText: 'Email Address',
@@ -365,90 +378,37 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       ),
                       const SizedBox(height: 14),
 
-                      // Mobile Number Field
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.grey.shade200),
-                        ),
-                        child: TextFormField(
-                          controller: _mobileController,
-                          keyboardType: TextInputType.phone,
-                          validator: (v) =>
-                              v == null ||
-                                  !RegExp(r'^[6-9][0-9]{9}$').hasMatch(v.trim())
-                              ? 'Enter a valid 10-digit Indian mobile number'
-                              : null,
-                          decoration: InputDecoration(
-                            hintText: 'Mobile Number',
-                            hintStyle: TextStyle(
-                              color: Colors.grey.shade400,
-                              fontSize: 14,
-                            ),
-                            prefixIcon: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const SizedBox(width: 12),
-                                Icon(
-                                  Icons.phone_outlined,
-                                  color: Colors.grey.shade500,
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 8),
-                                const Text(
-                                  '+91',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(width: 4),
-                                const Icon(
-                                  Icons.keyboard_arrow_down,
-                                  size: 18,
-                                  color: Colors.grey,
-                                ),
-                                const SizedBox(width: 8),
-                              ],
-                            ),
-                            border: InputBorder.none,
-                            contentPadding: const EdgeInsets.symmetric(
-                              vertical: 16,
-                            ),
-                          ),
-                        ),
-                      ),
+                      _buildMobileField(),
                       const SizedBox(height: 14),
 
-                      // Create Password
                       _buildInputField(
                         controller: _passwordController,
                         hintText: 'Create Password',
                         icon: Icons.lock_outline,
                         isPassword: true,
                         obscureText: _obscurePassword,
-                        onToggleVisibility: () => setState(
-                          () => _obscurePassword = !_obscurePassword,
-                        ),
+                        onToggleVisibility: () {
+                          setState(() {
+                            _obscurePassword = !_obscurePassword;
+                          });
+                        },
                       ),
                       const SizedBox(height: 14),
 
-                      // Confirm Password
                       _buildInputField(
                         controller: _confirmPasswordController,
                         hintText: 'Confirm Password',
                         icon: Icons.lock_outline,
                         isPassword: true,
                         obscureText: _obscureConfirmPassword,
-                        onToggleVisibility: () => setState(
-                          () => _obscureConfirmPassword =
-                              !_obscureConfirmPassword,
-                        ),
+                        onToggleVisibility: () {
+                          setState(() {
+                            _obscureConfirmPassword = !_obscureConfirmPassword;
+                          });
+                        },
                       ),
                       const SizedBox(height: 14),
 
-                      // Terms and Conditions
                       Row(
                         children: [
                           SizedBox(
@@ -460,14 +420,17 @@ class _SignUpScreenState extends State<SignUpScreen> {
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(4),
                               ),
-                              onChanged: (v) =>
-                                  setState(() => _isTermsAccepted = v ?? false),
+                              onChanged: (value) {
+                                setState(
+                                  () => _isTermsAccepted = value ?? false,
+                                );
+                              },
                             ),
                           ),
                           const SizedBox(width: 8),
-                          Expanded(
-                            child: RichText(
-                              text: const TextSpan(
+                          const Expanded(
+                            child: Text.rich(
+                              TextSpan(
                                 text: 'I agree to the ',
                                 style: TextStyle(
                                   color: Colors.black,
@@ -495,9 +458,16 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 8),
 
-                      // Create Account Button
+                      if (!_isTermsAccepted)
+                        const Text(
+                          'Please select Terms & Conditions to create an account.',
+                          style: TextStyle(color: Colors.red, fontSize: 12),
+                        ),
+
+                      const SizedBox(height: 16),
+
                       SizedBox(
                         width: double.infinity,
                         height: 50,
@@ -517,8 +487,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                 ? 'Create Account'
                                 : 'Please select Terms & Conditions',
                             textAlign: TextAlign.center,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 14,
+                              color: _isTermsAccepted
+                                  ? Colors.white
+                                  : Colors.grey.shade700,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -526,13 +499,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       ),
                       const SizedBox(height: 20),
 
-                      // Login Redirect Link
                       Center(
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             const Text(
-                              "Already have an account? ",
+                              'Already have an account? ',
                               style: TextStyle(
                                 color: Colors.grey,
                                 fontSize: 13,
@@ -543,7 +515,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                 Navigator.pushReplacement(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (context) => const LoginScreen(),
+                                    builder: (_) => const LoginScreen(),
                                   ),
                                 );
                               },
@@ -573,6 +545,161 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
   }
 
+  Widget _buildBusinessCategoryDropdown() {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('business_categories')
+          .orderBy('name')
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.red.shade200),
+            ),
+            child: const Text(
+              'Could not load Business Categories.',
+              style: TextStyle(color: Colors.red),
+            ),
+          );
+        }
+
+        if (!snapshot.hasData) {
+          return Container(
+            height: 54,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: const Row(
+              children: [
+                SizedBox(width: 16),
+                Icon(Icons.category_outlined, color: Colors.grey),
+                SizedBox(width: 12),
+                Expanded(child: Text('Loading Business Categories...')),
+                SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: 16),
+              ],
+            ),
+          );
+        }
+
+        final categories =
+            snapshot.data!.docs
+                .map((doc) => (doc.data()['name'] ?? '').toString().trim())
+                .where((name) => name.isNotEmpty)
+                .toSet()
+                .toList()
+              ..sort();
+
+        final selectedValue = categories.contains(_businessCategory)
+            ? _businessCategory
+            : null;
+
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade200),
+          ),
+          child: DropdownButtonFormField<String>(
+            value: selectedValue,
+            isExpanded: true,
+            validator: (value) {
+              if (value == null || value.trim().isEmpty) {
+                return 'Please select a Business Category';
+              }
+              return null;
+            },
+            icon: const Icon(Icons.keyboard_arrow_down),
+            decoration: InputDecoration(
+              hintText: categories.isEmpty
+                  ? 'No Business Categories available'
+                  : 'Select Business Category',
+              hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+              prefixIcon: Icon(
+                Icons.category_outlined,
+                color: Colors.grey.shade500,
+                size: 20,
+              ),
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(vertical: 16),
+            ),
+            items: categories
+                .map(
+                  (category) => DropdownMenuItem<String>(
+                    value: category,
+                    child: Text(category, overflow: TextOverflow.ellipsis),
+                  ),
+                )
+                .toList(),
+            onChanged: categories.isEmpty
+                ? null
+                : (value) {
+                    setState(() => _businessCategory = value);
+                  },
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildMobileField() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: TextFormField(
+        controller: _mobileController,
+        keyboardType: TextInputType.phone,
+        validator: (value) {
+          final mobile = (value ?? '').trim();
+
+          if (!RegExp(r'^[6-9][0-9]{9}$').hasMatch(mobile)) {
+            return 'Enter a valid 10-digit Indian mobile number';
+          }
+
+          return null;
+        },
+        decoration: InputDecoration(
+          hintText: 'Mobile Number',
+          hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+          prefixIcon: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(width: 12),
+              Icon(Icons.phone_outlined, color: Colors.grey.shade500, size: 20),
+              const SizedBox(width: 8),
+              const Text(
+                '+91',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(width: 4),
+              const Icon(
+                Icons.keyboard_arrow_down,
+                size: 18,
+                color: Colors.grey,
+              ),
+              const SizedBox(width: 8),
+            ],
+          ),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(vertical: 16),
+        ),
+      ),
+    );
+  }
+
   Widget _buildInputField({
     required TextEditingController controller,
     required String hintText,
@@ -592,20 +719,27 @@ class _SignUpScreenState extends State<SignUpScreen> {
         controller: controller,
         keyboardType: keyboardType,
         obscureText: obscureText,
-        validator: (v) {
-          final value = v ?? '';
-          if (value.trim().isEmpty) return 'Required';
+        validator: (value) {
+          final text = value ?? '';
+
+          if (text.trim().isEmpty) {
+            return 'Required';
+          }
+
           if (controller == _emailController &&
-              !RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(value.trim())) {
+              !RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(text.trim())) {
             return 'Enter a valid email address';
           }
-          if (controller == _passwordController && value.length < 6) {
+
+          if (controller == _passwordController && text.length < 6) {
             return 'Use at least 6 characters';
           }
+
           if (controller == _confirmPasswordController &&
-              value != _passwordController.text) {
+              text != _passwordController.text) {
             return 'Passwords do not match';
           }
+
           return null;
         },
         decoration: InputDecoration(
@@ -628,56 +762,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
           contentPadding: const EdgeInsets.symmetric(vertical: 16),
         ),
       ),
-    );
-  }
-
-  Widget _buildSocialButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.grey.shade200),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 20, color: Colors.black),
-            const SizedBox(width: 6),
-            Flexible(
-              child: Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFeatureItem(IconData icon, String title) {
-    return Row(
-      children: [
-        Icon(icon, size: 16, color: const Color(0xFF0052FF)),
-        const SizedBox(width: 8),
-        Text(
-          title,
-          style: const TextStyle(fontSize: 12, color: Colors.black87),
-        ),
-      ],
     );
   }
 }

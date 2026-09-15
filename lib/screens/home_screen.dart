@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-
+import 'request_cooldown_service.dart';
 import 'catalog_support.dart';
 import 'product_details_screen.dart';
 import 'estimated_order_screen.dart';
@@ -573,11 +573,13 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
                           productId: _text(product['id']),
                           imageUrl: _text(product['frontImage']),
                           title: _text(product['productName']),
-                          price: _text(product['sellingPrice']),
-                          unit: _text(product['unitTypes']),
+                          price: _text(product['unitPrice']),
+
                           specs: {
                             'Category:': _text(product['category']),
-                            'Min quantity:': _text(product['minOrderQuantity']),
+                            'Min quantity:':
+                                '${_text(product['minOrderQuantity'])} ${_text(product['unitTypes'])}'
+                                    .trim(),
                             'Seller:': _text(product['sellerShopName']),
                             'Stock:': _text(product['stockStatus']),
                           },
@@ -648,7 +650,7 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
     required String imageUrl,
     required String title,
     required String price,
-    required String unit,
+
     required Map<String, String> specs,
   }) {
     return Container(
@@ -712,16 +714,6 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
                           fontWeight: FontWeight.bold,
                           color: Colors.black,
                         ),
-                        children: [
-                          TextSpan(
-                            text: ' $unit',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey,
-                              fontWeight: FontWeight.normal,
-                            ),
-                          ),
-                        ],
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -860,7 +852,7 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
         return;
       }
 
-      await FirebaseFirestore.instance.collection('enquiries').add({
+      await RequestCooldownService.submitEnquiry({
         'buyerId': user.uid,
         'buyerName': '${data['firstName'] ?? ''} ${data['lastName'] ?? ''}'
             .trim(),
@@ -892,6 +884,12 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
           ],
         ),
       );
+    } on RequestCooldownException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+      }
     } on FirebaseException catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

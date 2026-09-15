@@ -259,7 +259,7 @@ class _AdminEnquiryDashboardScreenState
               child: DropdownButtonFormField<String>(
                 // Recreate the field when search resets the selected status.
                 key: ValueKey<String>('status-filter-$filter'),
-                value: filter,
+                initialValue: filter,
                 isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: 'Filter status',

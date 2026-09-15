@@ -6,6 +6,7 @@ import 'shop_settings.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'catalog_support.dart';
+import 'request_cooldown_service.dart';
 
 class ProductDetailsScreen extends StatefulWidget {
   final String? productId;
@@ -43,9 +44,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
   }
 
   bool _sendingSample = false;
-  bool _sampleSent = false;
+
   Future<void> _requestSample() async {
-    if (!_canUseBuyerActions || _sendingSample || _sampleSent) return;
+    if (!_canUseBuyerActions || _sendingSample) return;
     setState(() => _sendingSample = true);
     try {
       final user = FirebaseAuth.instance.currentUser;
@@ -70,7 +71,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
       if (p == null || p['isActive'] != true || p['status'] != 'Approved') {
         throw StateError('This product is no longer available.');
       }
-      await FirebaseFirestore.instance.collection('sample_requests').add({
+      await RequestCooldownService.submitSample({
         'buyerId': user.uid,
         'userName': '${buyer['firstName'] ?? ''} ${buyer['lastName'] ?? ''}'
             .trim(),
@@ -87,7 +88,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
         'createdAt': FieldValue.serverTimestamp(),
       });
       if (!mounted) return;
-      setState(() => _sampleSent = true);
+
       await showDialog<void>(
         context: context,
         builder: (c) => AlertDialog(
@@ -103,6 +104,12 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
           ],
         ),
       );
+    } on RequestCooldownException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -116,7 +123,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
         );
       }
     } finally {
-      if (mounted) setState(() => _sendingSample = false);
+      if (mounted) {
+        setState(() => _sendingSample = false);
+      }
     }
   }
 
@@ -670,10 +679,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                       Expanded(
                         flex: 4,
                         child: OutlinedButton(
-                          onPressed:
-                              _canUseBuyerActions &&
-                                  !_sendingSample &&
-                                  !_sampleSent
+                          onPressed: _canUseBuyerActions && !_sendingSample
                               ? _requestSample
                               : null,
                           style: OutlinedButton.styleFrom(
@@ -716,8 +722,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                               Text(
                                 _sendingSample
                                     ? 'Submitting…'
-                                    : _sampleSent
-                                    ? 'Request sent'
                                     : 'Get product sample',
                                 style: TextStyle(
                                   fontSize: 10,

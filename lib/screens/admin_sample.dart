@@ -348,7 +348,7 @@ class _AdminSampleScreenState extends State<AdminSampleScreen> {
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
               child: DropdownButtonFormField<String>(
                 key: ValueKey<String>('sample-filter-$_filter'),
-                value: _filter,
+                initialValue: _filter,
                 isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: 'Filter by status',

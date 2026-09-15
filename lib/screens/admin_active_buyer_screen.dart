@@ -13,6 +13,7 @@ class AdminBuyersScreen extends StatefulWidget {
 
 class _AdminBuyersScreenState extends State<AdminBuyersScreen> {
   String _selectedCategory = 'All';
+  String _selectedStatus = 'All';
 
   List<Map<String, dynamic>> _buyers = [];
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _subscription;
@@ -88,13 +89,23 @@ class _AdminBuyersScreenState extends State<AdminBuyersScreen> {
     return ['All', ...categories];
   }
 
-  // Filter buyers based on selected category
+  static const List<String> _statuses = [
+    'All',
+    'Pending',
+    'Approved',
+    'Suspended',
+    'Rejected',
+  ];
+
+  // Filter buyers by both business category and account status.
   List<Map<String, dynamic>> get _filteredBuyers {
-    if (_selectedCategory == 'All') {
-      return _buyers;
-    }
     return _buyers
-        .where((b) => b['businessCategory'] == _selectedCategory)
+        .where(
+          (buyer) =>
+              (_selectedCategory == 'All' ||
+                  buyer['businessCategory'] == _selectedCategory) &&
+              (_selectedStatus == 'All' || buyer['status'] == _selectedStatus),
+        )
         .toList();
   }
 
@@ -215,12 +226,61 @@ class _AdminBuyersScreenState extends State<AdminBuyersScreen> {
 
                 const Divider(height: 1, color: Color(0xFFE0E0E0)),
 
+                // Horizontal Status Filter
+                Container(
+                  height: 56,
+                  color: Colors.white,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                    itemCount: _statuses.length,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(width: 8),
+                    itemBuilder: (context, index) {
+                      final status = _statuses[index];
+                      final isSelected = _selectedStatus == status;
+
+                      return ChoiceChip(
+                        label: Text(status),
+                        selected: isSelected,
+                        selectedColor: const Color(0xFF0052FF),
+                        backgroundColor: Colors.grey.shade100,
+                        labelStyle: TextStyle(
+                          color: isSelected ? Colors.white : Colors.black87,
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                          fontSize: 13,
+                        ),
+                        side: BorderSide(
+                          color: isSelected
+                              ? const Color(0xFF0052FF)
+                              : Colors.grey.shade300,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        onSelected: (selected) {
+                          if (selected) {
+                            setState(() => _selectedStatus = status);
+                          }
+                        },
+                      );
+                    },
+                  ),
+                ),
+
+                const Divider(height: 1, color: Color(0xFFE0E0E0)),
+
                 // Buyers List
                 Expanded(
                   child: filteredList.isEmpty
                       ? const Center(
                           child: Text(
-                            'No buyers found in this category',
+                            'No buyers found for the selected filters',
                             style: TextStyle(color: Colors.grey),
                           ),
                         )
