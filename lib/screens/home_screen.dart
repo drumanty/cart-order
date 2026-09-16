@@ -574,13 +574,16 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
                           imageUrl: _text(product['frontImage']),
                           title: _text(product['productName']),
                           price: _text(product['unitPrice']),
+                          unit: _text(product['unitTypes']),
 
                           specs: {
-                            'Category:': _text(product['category']),
+                            'Packages:': _text(
+                              product['howManyProductsInUnit'],
+                            ),
                             'Min quantity:':
                                 '${_text(product['minOrderQuantity'])} ${_text(product['unitTypes'])}'
                                     .trim(),
-                            'Seller:': _text(product['sellerShopName']),
+                            'Selling Price:': _text(product['sellingPrice']),
                             'Stock:': _text(product['stockStatus']),
                           },
                         ),
@@ -650,6 +653,7 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
     required String imageUrl,
     required String title,
     required String price,
+    required String unit,
 
     required Map<String, String> specs,
   }) {
@@ -714,6 +718,17 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
                           fontWeight: FontWeight.bold,
                           color: Colors.black,
                         ),
+                        children: [
+                          if (unit.trim().isNotEmpty)
+                            TextSpan(
+                              text: ' $unit',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey,
+                                fontWeight: FontWeight.normal,
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                     const SizedBox(height: 6),

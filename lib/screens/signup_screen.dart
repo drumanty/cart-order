@@ -604,49 +604,115 @@ class _SignUpScreenState extends State<SignUpScreen> {
             ? _businessCategory
             : null;
 
-        return Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey.shade200),
-          ),
-          child: DropdownButtonFormField<String>(
-            value: selectedValue,
-            isExpanded: true,
-            validator: (value) {
-              if (value == null || value.trim().isEmpty) {
-                return 'Please select a Business Category';
-              }
-              return null;
-            },
-            icon: const Icon(Icons.keyboard_arrow_down),
-            decoration: InputDecoration(
-              hintText: categories.isEmpty
-                  ? 'No Business Categories available'
-                  : 'Select Business Category',
-              hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-              prefixIcon: Icon(
-                Icons.category_outlined,
-                color: Colors.grey.shade500,
-                size: 20,
+        return FormField<String>(
+          key: ValueKey<String?>(selectedValue),
+          initialValue: selectedValue,
+          validator: (value) => value == null || !categories.contains(value)
+              ? 'Please select a Business Category'
+              : null,
+          builder: (field) {
+            final screenSize = MediaQuery.of(context).size;
+            final menuWidth = (screenSize.width * 0.60)
+                .clamp(180.0, 360.0)
+                .toDouble();
+
+            return PopupMenuButton<String>(
+              enabled: categories.isNotEmpty && !_isLoading,
+              tooltip: 'Choose business category',
+              position: PopupMenuPosition.under,
+              offset: Offset(screenSize.width, 6),
+              color: Colors.white,
+              elevation: 8,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
               ),
-              border: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(vertical: 16),
-            ),
-            items: categories
-                .map(
-                  (category) => DropdownMenuItem<String>(
-                    value: category,
-                    child: Text(category, overflow: TextOverflow.ellipsis),
+              constraints: BoxConstraints(
+                minWidth: menuWidth,
+                maxWidth: menuWidth,
+                maxHeight: screenSize.height * 0.45,
+              ),
+              onSelected: (value) {
+                field.didChange(value);
+                setState(() => _businessCategory = value);
+              },
+              itemBuilder: (_) => categories.map((category) {
+                final isSelected = category == selectedValue;
+                return PopupMenuItem<String>(
+                  value: category,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          child: Text(
+                            category,
+                            softWrap: true,
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: isSelected
+                                  ? const Color(0xFF0052FF)
+                                  : Colors.black87,
+                              fontWeight: isSelected
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (isSelected) ...[
+                        const SizedBox(width: 8),
+                        const Icon(
+                          Icons.check_circle,
+                          color: Color(0xFF0052FF),
+                          size: 18,
+                        ),
+                      ],
+                    ],
                   ),
-                )
-                .toList(),
-            onChanged: categories.isEmpty
-                ? null
-                : (value) {
-                    setState(() => _businessCategory = value);
-                  },
-          ),
+                );
+              }).toList(),
+              child: InputDecorator(
+                decoration: InputDecoration(
+                  labelText: 'Business Category',
+                  errorText: field.errorText,
+                  filled: true,
+                  fillColor: Colors.white,
+                  prefixIcon: const Icon(
+                    Icons.category_outlined,
+                    color: Color(0xFF0052FF),
+                    size: 20,
+                  ),
+                  suffixIcon: const Icon(
+                    Icons.expand_more_rounded,
+                    color: Color(0xFF0052FF),
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.grey.shade200),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 16,
+                  ),
+                ),
+                child: Text(
+                  selectedValue ??
+                      (categories.isEmpty
+                          ? 'No categories available'
+                          : 'Select category'),
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: selectedValue == null
+                        ? Colors.grey.shade500
+                        : Colors.black87,
+                  ),
+                ),
+              ),
+            );
+          },
         );
       },
     );
