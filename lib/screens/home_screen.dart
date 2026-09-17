@@ -639,10 +639,6 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
             icon: Icon(Icons.person_outline),
             label: 'Profile',
           ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.logout),
-            label: 'Log Out',
-          ),
         ],
       ),
     );

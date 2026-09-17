@@ -1,11 +1,15 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'admin_estimate_order.dart';
-import 'admin_enquiry_screen.dart';
-import 'admin_sample.dart';
-import 'admin_product_query_screen.dart';
+
 import 'admin_active_buyer_screen.dart';
 import 'admin_active_seller_screen.dart';
+import 'admin_enquiry_screen.dart';
+import 'admin_estimate_order.dart';
+import 'admin_product_query_screen.dart';
 import 'admin_product_screen.dart';
+import 'admin_sample.dart';
+import 'login_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -15,18 +19,40 @@ class AdminDashboardScreen extends StatefulWidget {
 }
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
-  // Simple logout logic
-  void _handleLogout() {
-    showDialog(
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> get _buyersStream =>
+      _db.collection('users').where('userType', isEqualTo: 'Buyer').snapshots();
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> get _sellersStream => _db
+      .collection('users')
+      .where('userType', isEqualTo: 'Seller')
+      .snapshots();
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> get _productsStream =>
+      _db.collection('products').snapshots();
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> _requestsWithStatus(
+    String collection,
+    String status,
+  ) {
+    return _db
+        .collection(collection)
+        .where('status', isEqualTo: status)
+        .snapshots();
+  }
+
+  Future<void> _handleLogout() async {
+    final shouldLogout = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Confirm Logout'),
         content: const Text(
           'Are you sure you want to log out of the admin panel?',
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.of(dialogContext).pop(false),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
@@ -34,14 +60,205 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               backgroundColor: Colors.redAccent,
               foregroundColor: Colors.white,
             ),
-            onPressed: () {
-              Navigator.pop(context); // Close dialog
-              // TODO: Add your authentication logout logic / navigation to Login screen here
-            },
+            onPressed: () => Navigator.of(dialogContext).pop(true),
             child: const Text('Logout'),
           ),
         ],
       ),
+    );
+
+    if (shouldLogout != true || !mounted) return;
+
+    try {
+      await FirebaseAuth.instance.signOut();
+      if (!mounted) return;
+
+      Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (route) => false,
+      );
+    } on FirebaseAuthException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not log out (${error.code}).')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not log out. Please try again.')),
+      );
+    }
+  }
+
+  String _countText(int count, String singular, String plural) {
+    return '$count ${count == 1 ? singular : plural}';
+  }
+
+  Widget _buildUserCard({
+    required String title,
+    required IconData icon,
+    required Color color,
+    required Stream<QuerySnapshot<Map<String, dynamic>>> stream,
+    required VoidCallback onTap,
+  }) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: stream,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return _buildNavigationCard(
+            title: title,
+            badge: 'Unable to load',
+            icon: icon,
+            color: color,
+            onTap: onTap,
+          );
+        }
+
+        if (!snapshot.hasData) {
+          return _buildNavigationCard(
+            title: title,
+            badge: 'Loading...',
+            icon: icon,
+            color: color,
+            onTap: onTap,
+          );
+        }
+
+        final users = snapshot.data!.docs
+            .map((document) => document.data())
+            .toList();
+        final activeCount = users
+            .where((user) => user['accountStatus'] == 'approved')
+            .length;
+        final pendingCount = users
+            .where((user) => user['accountStatus'] == 'pending')
+            .length;
+
+        return _buildNavigationCard(
+          title: title,
+          badge: _countText(activeCount, 'active', 'active'),
+          secondaryBadge: _countText(
+            pendingCount,
+            'new request',
+            'new requests',
+          ),
+          secondaryBadgeColor: pendingCount > 0
+              ? Colors.redAccent
+              : Colors.grey,
+          notificationCount: pendingCount,
+          icon: icon,
+          color: color,
+          onTap: onTap,
+        );
+      },
+    );
+  }
+
+  Widget _buildProductCard() {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: _productsStream,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return _buildNavigationCard(
+            title: 'Product Catalog',
+            badge: 'Unable to load',
+            icon: Icons.inventory_2_outlined,
+            color: Colors.teal,
+            onTap: _openProducts,
+          );
+        }
+
+        if (!snapshot.hasData) {
+          return _buildNavigationCard(
+            title: 'Product Catalog',
+            badge: 'Loading...',
+            icon: Icons.inventory_2_outlined,
+            color: Colors.teal,
+            onTap: _openProducts,
+          );
+        }
+
+        final availableCount = snapshot.data!.docs.where((document) {
+          final product = document.data();
+          return product['status'] == 'Approved' && product['isActive'] == true;
+        }).length;
+
+        return _buildNavigationCard(
+          title: 'Product Catalog',
+          badge: _countText(availableCount, 'product', 'products'),
+          icon: Icons.inventory_2_outlined,
+          color: Colors.teal,
+          onTap: _openProducts,
+        );
+      },
+    );
+  }
+
+  Widget _buildRequestCard({
+    required String title,
+    required String collection,
+    required String waitingStatus,
+    required String emptyLabel,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: _requestsWithStatus(collection, waitingStatus),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return _buildNavigationCard(
+            title: title,
+            badge: 'Unable to load',
+            icon: icon,
+            color: color,
+            onTap: onTap,
+          );
+        }
+
+        if (!snapshot.hasData) {
+          return _buildNavigationCard(
+            title: title,
+            badge: 'Loading...',
+            icon: icon,
+            color: color,
+            onTap: onTap,
+          );
+        }
+
+        final waitingCount = snapshot.data!.docs.length;
+        return _buildNavigationCard(
+          title: title,
+          badge: waitingCount == 0
+              ? emptyLabel
+              : _countText(waitingCount, 'new request', 'new requests'),
+          notificationCount: waitingCount,
+          icon: icon,
+          color: color,
+          onTap: onTap,
+        );
+      },
+    );
+  }
+
+  void _openBuyers() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => AdminBuyersScreen()),
+    );
+  }
+
+  void _openSellers() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => AdminSellersScreen()),
+    );
+  }
+
+  void _openProducts() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => AdminProductsScreen()),
     );
   }
 
@@ -96,126 +313,115 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       body: SafeArea(
         child: ListView(
           physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           children: [
             const Text(
               'Quick Navigation',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
+            const SizedBox(height: 4),
+            const Text(
+              'Red badges show only items waiting for your action.',
+              style: TextStyle(fontSize: 11, color: Colors.grey),
+            ),
             const SizedBox(height: 12),
-
             GridView.count(
               crossAxisCount: 3,
               crossAxisSpacing: 10,
               mainAxisSpacing: 10,
-              childAspectRatio: 0.85,
+              childAspectRatio: 0.80,
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               children: [
-                _buildNavigationCard(
+                _buildUserCard(
                   title: 'Active Buyer',
-                  badge: '1,280',
                   icon: Icons.person_outline,
                   color: const Color(0xFF0052FF),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => AdminBuyersScreen(),
-                      ),
-                    );
-                  },
+                  stream: _buyersStream,
+                  onTap: _openBuyers,
                 ),
-                _buildNavigationCard(
+                _buildUserCard(
                   title: 'Active Seller',
-                  badge: '340',
                   icon: Icons.storefront_outlined,
                   color: Colors.indigo,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => AdminSellersScreen(),
-                      ),
-                    );
-                  },
+                  stream: _sellersStream,
+                  onTap: _openSellers,
                 ),
-                _buildNavigationCard(
-                  title: 'Product Catalog',
-                  badge: '562',
-                  icon: Icons.inventory_2_outlined,
-                  color: Colors.teal,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => AdminProductsScreen(),
-                      ),
-                    );
-                  },
-                ),
-                _buildNavigationCard(
+                _buildProductCard(),
+                _buildRequestCard(
                   title: 'Estimate Order',
-                  badge: '14',
+                  collection: 'estimated_orders',
+                  waitingStatus: 'Pending Approval',
+                  emptyLabel: 'No pending orders',
                   icon: Icons.receipt_long_outlined,
                   color: Colors.orange,
                   onTap: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => EstimatedOrdersScreen(),
+                        builder: (_) => EstimatedOrdersScreen(),
                       ),
                     );
                   },
                 ),
-                _buildNavigationCard(
+                _buildRequestCard(
                   title: 'Enquiry',
-                  badge: '8',
+                  collection: 'enquiries',
+                  waitingStatus: 'submitted',
+                  emptyLabel: 'No new enquiries',
                   icon: Icons.mark_chat_unread_outlined,
                   color: Colors.redAccent,
                   onTap: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => AdminEnquiryDashboardScreen(),
+                        builder: (_) => AdminEnquiryDashboardScreen(),
                       ),
                     );
                   },
                 ),
-                _buildNavigationCard(
+                _buildRequestCard(
                   title: 'Sample Request',
-                  badge: '5',
+                  collection: 'sample_requests',
+                  waitingStatus: 'Pending',
+                  emptyLabel: 'No new samples',
                   icon: Icons.local_post_office_outlined,
                   color: Colors.amber.shade800,
                   onTap: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(
-                        builder: (context) => AdminSampleScreen(),
-                      ),
+                      MaterialPageRoute(builder: (_) => AdminSampleScreen()),
                     );
                   },
                 ),
-                _buildNavigationCard(
+                _buildRequestCard(
                   title: 'Product Query',
-                  badge: '5',
+                  collection: 'product_queries',
+                  waitingStatus: 'submitted',
+                  emptyLabel: 'No new queries',
                   icon: Icons.help_outline,
-                  color: Colors.amber.shade800,
+                  color: Colors.purple,
                   onTap: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => AdminProductQueryScreen(),
+                        builder: (_) => AdminProductQueryScreen(),
                       ),
                     );
                   },
                 ),
                 _buildNavigationCard(
                   title: 'Search Analytics',
-                  badge: 'Live',
+                  badge: 'Coming soon',
                   icon: Icons.analytics_outlined,
-                  color: Colors.purple,
-                  onTap: () {},
+                  color: Colors.blueGrey,
+                  onTap: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Search analytics will be added next.'),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -231,7 +437,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     required IconData icon,
     required Color color,
     required VoidCallback onTap,
+    int? notificationCount,
+    String? secondaryBadge,
+    Color? secondaryBadgeColor,
   }) {
+    final hasNotification = notificationCount != null && notificationCount > 0;
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
@@ -246,16 +457,49 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: color, size: 20),
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, color: color, size: 20),
+                ),
+                if (hasNotification)
+                  Positioned(
+                    right: -9,
+                    top: -8,
+                    child: Container(
+                      constraints: const BoxConstraints(minWidth: 18),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent,
+                        border: Border.all(color: Colors.white, width: 1.5),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        notificationCount! > 99
+                            ? '99+'
+                            : notificationCount.toString(),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Text(
               title,
               textAlign: TextAlign.center,
@@ -276,6 +520,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               ),
               child: Text(
                 badge,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: color,
                   fontSize: 9.5,
@@ -283,6 +529,28 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ),
               ),
             ),
+            if (secondaryBadge != null) ...[
+              const SizedBox(height: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: (secondaryBadgeColor ?? Colors.redAccent).withOpacity(
+                    0.1,
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  secondaryBadge,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: secondaryBadgeColor ?? Colors.redAccent,
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),

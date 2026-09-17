@@ -205,6 +205,19 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
   AnimationController? _moreProductsController;
 
   Map<String, dynamic> _product = {};
+  late final Stream<QuerySnapshot<Map<String, dynamic>>>? _reviewsStream;
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> _reviews = [];
+  bool _reviewsLoading = true;
+  bool _reviewsFailed = false;
+  bool _reviewDialogOpen = false;
+  double get _averageRating => _reviews.isEmpty
+      ? 0
+      : _reviews.fold<double>(
+              0,
+              (sum, doc) => sum + (doc.data()['rating'] as num).toDouble(),
+            ) /
+            _reviews.length;
+
   late final Stream<DocumentSnapshot<Map<String, dynamic>>>? _detailsStream;
   String get _packages => _product['howManyProductsInUnit'] ?? '';
   String get _material => _product['description'] ?? '';
@@ -249,6 +262,14 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
         : FirebaseFirestore.instance
               .collection('products')
               .doc(widget.productId)
+              .snapshots();
+
+    _reviewsStream = _detailsStream == null
+        ? null
+        : FirebaseFirestore.instance
+              .collection('products')
+              .doc(widget.productId)
+              .collection('reviews')
               .snapshots();
 
     // Minimum order badge blinking animation
@@ -300,9 +321,146 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
           );
         }
         _product = catalogProduct(snapshot.data!);
-        return _buildDetails(context);
+        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: _reviewsStream,
+          builder: (context, reviewsSnapshot) {
+            _reviewsLoading =
+                !reviewsSnapshot.hasData && !reviewsSnapshot.hasError;
+            _reviewsFailed = reviewsSnapshot.hasError;
+            _reviews = reviewsSnapshot.data?.docs.toList() ?? [];
+            _reviews.sort((a, b) {
+              final x = a.data()['updatedAt'];
+              final y = b.data()['updatedAt'];
+              return (y is Timestamp ? y.millisecondsSinceEpoch : 0).compareTo(
+                x is Timestamp ? x.millisecondsSinceEpoch : 0,
+              );
+            });
+            return _buildDetails(context);
+          },
+        );
       },
     );
+  }
+
+  Future<void> _writeReview(Map<String, dynamic>? existing) async {
+    if (!_canUseBuyerActions || _reviewDialogOpen) return;
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+    final productId = widget.productId;
+    if (productId == null) return;
+    int rating = (existing?['rating'] as num?)?.toInt() ?? 0;
+    String reviewText = (existing?['text'] ?? '').toString();
+    bool saving = false;
+    String? message;
+    setState(() => _reviewDialogOpen = true);
+    try {
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, updateDialog) => PopScope(
+            canPop: !saving,
+            child: AlertDialog(
+              title: Text(
+                existing == null ? 'Write a review' : 'Edit your review',
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Wrap(
+                      children: List.generate(
+                        5,
+                        (index) => IconButton(
+                          tooltip: '${index + 1} stars',
+                          onPressed: saving
+                              ? null
+                              : () => updateDialog(() => rating = index + 1),
+                          icon: Icon(
+                            index < rating ? Icons.star : Icons.star_border,
+                            color: Colors.amber,
+                          ),
+                        ),
+                      ),
+                    ),
+                    TextFormField(
+                      initialValue: reviewText,
+                      enabled: !saving,
+                      maxLength: 1000,
+                      minLines: 3,
+                      maxLines: 5,
+                      decoration: const InputDecoration(
+                        labelText: 'Your review',
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (value) => reviewText = value,
+                    ),
+                    if (message != null)
+                      Text(message!, style: const TextStyle(color: Colors.red)),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: saving ? null : () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: saving
+                      ? null
+                      : () async {
+                          if (rating < 1 || reviewText.trim().isEmpty) {
+                            updateDialog(
+                              () =>
+                                  message = 'Choose stars and write a review.',
+                            );
+                            return;
+                          }
+                          if (!_canUseBuyerActions ||
+                              FirebaseAuth.instance.currentUser?.uid != uid) {
+                            updateDialog(
+                              () => message =
+                                  'Please sign in as an approved Buyer.',
+                            );
+                            return;
+                          }
+                          updateDialog(() {
+                            saving = true;
+                            message = null;
+                          });
+                          try {
+                            await FirebaseFirestore.instance
+                                .collection('products')
+                                .doc(productId)
+                                .collection('reviews')
+                                .doc(uid)
+                                .set({
+                                  'rating': rating,
+                                  'text': reviewText.trim(),
+                                  'updatedAt': FieldValue.serverTimestamp(),
+                                });
+                            if (dialogContext.mounted) {
+                              Navigator.pop(dialogContext);
+                            }
+                          } catch (_) {
+                            if (dialogContext.mounted) {
+                              updateDialog(() {
+                                saving = false;
+                                message =
+                                    'Could not save review. Check connection and permissions.';
+                              });
+                            }
+                          }
+                        },
+                  child: Text(saving ? 'Saving…' : 'Save review'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _reviewDialogOpen = false);
+    }
   }
 
   Widget _buildDetails(BuildContext context) {
@@ -398,43 +556,17 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
 
                           SizedBox(height: 6),
 
-                          // Rating
-                          Row(
-                            children: [
-                              Row(
-                                children: List.generate(
-                                  5,
-                                  (index) => Icon(
-                                    _product['ratings'] > index
-                                        ? Icons.star
-                                        : Icons.star_border,
-                                    size: 14,
-                                    color: Colors.amber,
-                                  ),
-                                ),
-                              ),
-                              SizedBox(width: 6),
-                              Text(
-                                _product['reviewCount'] == 0
-                                    ? 'Not rated'
-                                    : '${_product['reviewCount']} reviews',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                            ],
+                          const Text(
+                            'Unit Price',
+                            style: TextStyle(fontSize: 12),
                           ),
-
-                          SizedBox(height: 10),
-
                           // Price
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.baseline,
                             textBaseline: TextBaseline.alphabetic,
                             children: [
                               Text(
-                                _sellingPrice,
+                                (_product['unitPrice'] ?? '').toString(),
                                 style: TextStyle(
                                   fontSize: 20,
                                   fontWeight: FontWeight.bold,
@@ -443,7 +575,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                               ),
                               SizedBox(width: 8),
                               Text(
-                                _productMrp,
+                                (_product['mrpUnitPrice'] ?? '').toString(),
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: Colors.grey.shade500,

@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'catalog_support.dart';
 import 'my_products_screen.dart';
 import 'product_details_screen.dart';
+import 'profile_details_screen.dart';
 
 class HomeScreenTwo extends StatefulWidget {
   const HomeScreenTwo({super.key});
@@ -296,6 +297,11 @@ class _HomeScreenTwoState extends State<HomeScreenTwo>
       Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => const MyProductsScreen()),
+      );
+    } else if (index == 2) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const ProfileDetailsScreen()),
       );
     } else {
       setState(() {
@@ -609,12 +615,16 @@ class _HomeScreenTwoState extends State<HomeScreenTwo>
                           productId: _text(product['id']),
                           imageUrl: _text(product['frontImage']),
                           title: _text(product['productName']),
-                          price: _text(product['sellingPrice']),
+                          price: _text(product['unitPrice']),
                           unit: _text(product['unitTypes']),
                           specs: {
-                            'Category:': _text(product['category']),
-                            'Min quantity:': _text(product['minOrderQuantity']),
-                            'Seller:': _text(product['sellerShopName']),
+                            'Packages:': _text(
+                              product['howManyProductsInUnit'],
+                            ),
+                            'Min quantity:':
+                                '${_text(product['minOrderQuantity'])} ${_text(product['unitTypes'])}'
+                                    .trim(),
+                            'Selling Price:': _text(product['sellingPrice']),
                             'Stock:': _text(product['stockStatus']),
                           },
                         ),
