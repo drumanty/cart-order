@@ -24,6 +24,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _shopNameController = TextEditingController();
   final _gstPanController = TextEditingController();
   final _shopAddressController = TextEditingController();
+  final _cityController = TextEditingController();
+  final _stateController = TextEditingController();
+  final _pincodeController = TextEditingController();
 
   String _userType = 'Buyer';
   String? _businessCategory;
@@ -44,6 +47,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
     _shopNameController.dispose();
     _gstPanController.dispose();
     _shopAddressController.dispose();
+    _cityController.dispose();
+    _stateController.dispose();
+    _pincodeController.dispose();
+
     super.dispose();
   }
 
@@ -129,6 +136,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
               'businessCategory': _businessCategory!.trim(),
               'gstPanNumber': _gstPanController.text.trim(),
               'shopAddress': _shopAddressController.text.trim(),
+              'city': _cityController.text.trim(),
+              'state': _stateController.text.trim(),
+              'pincode': _pincodeController.text.trim(),
               'photoUrl': null,
               'photoPath': null,
               'termsAccepted': true,
@@ -366,6 +376,27 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       _buildInputField(
                         controller: _shopAddressController,
                         hintText: 'Shop Address',
+                        icon: Icons.location_on_outlined,
+                      ),
+                      const SizedBox(height: 14),
+
+                      _buildInputField(
+                        controller: _cityController,
+                        hintText: 'City',
+                        icon: Icons.location_on_outlined,
+                      ),
+                      const SizedBox(height: 14),
+
+                      _buildInputField(
+                        controller: _stateController,
+                        hintText: 'State',
+                        icon: Icons.location_on_outlined,
+                      ),
+                      const SizedBox(height: 14),
+
+                      _buildInputField(
+                        controller: _pincodeController,
+                        hintText: 'Pincode',
                         icon: Icons.location_on_outlined,
                       ),
                       const SizedBox(height: 14),

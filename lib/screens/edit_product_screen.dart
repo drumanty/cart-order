@@ -375,21 +375,7 @@ class _EditProductScreenState extends State<EditProductScreen> {
                           ? 'Required'
                           : null,
                     ),
-                    _field(
-                      _frontImageController,
-                      'Front Image HTTPS URL',
-                      validator: _imageValidator,
-                    ),
-                    _field(
-                      _backImageController,
-                      'Back Image HTTPS URL',
-                      validator: _imageValidator,
-                    ),
-                    _field(
-                      _sideImageController,
-                      'Side Image HTTPS URL',
-                      validator: _imageValidator,
-                    ),
+
                     if (_error != null) ...[
                       const SizedBox(height: 8),
                       Text(_error!, style: const TextStyle(color: Colors.red)),

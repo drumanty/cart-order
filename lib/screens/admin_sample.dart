@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'product_details_screen.dart';
+
 class AdminSampleScreen extends StatefulWidget {
   const AdminSampleScreen({super.key});
 
@@ -497,6 +499,7 @@ class _AdminSampleScreenState extends State<AdminSampleScreen> {
     final buyerName = _buyerName(sample);
     final phone = _phone(sample);
     final buyerId = _text(sample['buyerId']);
+    final productId = _text(sample['productID']);
 
     return Container(
       key: ValueKey<String>('sample-card-$id'),
@@ -664,7 +667,33 @@ class _AdminSampleScreenState extends State<AdminSampleScreen> {
           children: [
             const Divider(height: 1),
             const SizedBox(height: 12),
-            _copyDetail('Contact number', phone),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: productId.isEmpty
+                    ? null
+                    : () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                ProductDetailsScreen(productId: productId),
+                          ),
+                        );
+                      },
+                icon: const Icon(Icons.visibility_outlined, size: 18),
+                label: const Text('View Product'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF0052FF),
+                  side: const BorderSide(color: Color(0xFF0052FF)),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
             _copyDetail('Buyer ID', buyerId),
             const SizedBox(height: 8),
 

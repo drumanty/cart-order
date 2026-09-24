@@ -60,25 +60,11 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
     }).toList();
   }
 
-  final List<Map<String, String>> _banners = const [
-    {
-      'subtitle': 'Best Quality Products',
-      'title': 'For Your Business',
-      'desc': 'Huge Range | Best Prices | Fast Delivery',
-      'btn': 'Shop Now',
-    },
-    {
-      'subtitle': 'Exclusive Discount',
-      'title': 'Up to 30% Off Electricals',
-      'desc': 'Top Brands | Certified Safety | Wholesale Prices',
-      'btn': 'Explore Offer',
-    },
-    {
-      'subtitle': 'New Arrivals',
-      'title': 'Premium Lighting & Fixtures',
-      'desc': 'Modern Designs | Energy Efficient | Durable Build',
-      'btn': 'View Collection',
-    },
+  final List<String> _banners = const [
+    'assets/banner_one.png',
+    'assets/agarbatti.png',
+    'assets/electric.png',
+    'assets/tracon_slider.png',
   ];
 
   @override
@@ -160,7 +146,7 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
   }
 
   void _startBannerAutoSlider() {
-    _bannerTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+    _bannerTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
       if (!mounted ||
           !(ModalRoute.of(context)?.isCurrent ?? false) ||
           !_bannerController.hasClients ||
@@ -463,6 +449,8 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
               ),
 
               // Banner Carousel
+
+              // Banner Carousel
               Column(
                 children: [
                   SizedBox(
@@ -483,44 +471,26 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
                           ),
                           child: Container(
                             width: double.infinity,
-                            padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(16),
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFF0052FF), Color(0xFF0030B8)],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
+                              color: const Color(0xFFF7F9FC),
                             ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  banner['subtitle']!,
-                                  style: const TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 12,
+                            clipBehavior: Clip.antiAlias,
+                            child: Image.asset(
+                              banner,
+                              width: double.infinity,
+                              height: double.infinity,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                debugPrint('Banner error: $banner - $error');
+                                return const Center(
+                                  child: Icon(
+                                    Icons.broken_image_outlined,
+                                    size: 40,
+                                    color: Colors.grey,
                                   ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  banner['title']!,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  banner['desc']!,
-                                  style: const TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                const Spacer(),
-                              ],
+                                );
+                              },
                             ),
                           ),
                         );

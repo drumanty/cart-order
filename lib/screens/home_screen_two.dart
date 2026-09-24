@@ -365,7 +365,7 @@ class _HomeScreenTwoState extends State<HomeScreenTwo>
                           const SizedBox(height: 2),
                           const Text(
                             'Welcome to Cart & Order',
-                            style: TextStyle(fontSize: 8, color: Colors.grey),
+                            style: TextStyle(fontSize: 11, color: Colors.grey),
                           ),
                         ],
                       ),

@@ -485,7 +485,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
-                        notificationCount! > 99
+                        notificationCount > 99
                             ? '99+'
                             : notificationCount.toString(),
                         textAlign: TextAlign.center,

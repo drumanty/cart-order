@@ -1,14 +1,347 @@
+import 'dart:typed_data';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'catalog_support.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+
 import 'add_product_screen.dart';
+import 'catalog_support.dart';
 
 class AdminProductsScreen extends StatefulWidget {
   const AdminProductsScreen({super.key});
 
   @override
   State<AdminProductsScreen> createState() => _AdminProductsScreenState();
+}
+
+class _AddCategorySheet extends StatefulWidget {
+  const _AddCategorySheet({required this.existingCategories});
+
+  final List<String> existingCategories;
+
+  @override
+  State<_AddCategorySheet> createState() => _AddCategorySheetState();
+}
+
+class _AddCategorySheetState extends State<_AddCategorySheet> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
+  final _imageUrlController = TextEditingController();
+
+  XFile? _pickedImage;
+  Uint8List? _imageBytes;
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _imageUrlController.dispose();
+    super.dispose();
+  }
+
+  String _documentId(String name) {
+    final id = name
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+        .replaceAll(RegExp(r'^-+|-+$'), '');
+    return id.isEmpty ? Uri.encodeComponent(name.trim().toLowerCase()) : id;
+  }
+
+  String _contentType(String fileName) {
+    switch (fileName.split('.').last.toLowerCase()) {
+      case 'png':
+        return 'image/png';
+      case 'webp':
+        return 'image/webp';
+      case 'gif':
+        return 'image/gif';
+      default:
+        return 'image/jpeg';
+    }
+  }
+
+  Future<void> _pickImage() async {
+    final image = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+    );
+    if (image == null) return;
+
+    final bytes = await image.readAsBytes();
+    if (!mounted) return;
+    setState(() {
+      _pickedImage = image;
+      _imageBytes = bytes;
+      _imageUrlController.clear();
+    });
+  }
+
+  Future<void> _save() async {
+    if (_saving || !_formKey.currentState!.validate()) return;
+
+    setState(() => _saving = true);
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw StateError('Please sign in again.');
+
+      final name = _nameController.text.trim();
+      final categoryId = _documentId(name);
+      var imageUrl = _imageUrlController.text.trim();
+      var imagePath = '';
+
+      if (_pickedImage != null) {
+        final bytes = _imageBytes ?? await _pickedImage!.readAsBytes();
+        final reference = FirebaseStorage.instance.ref().child(
+          'category_images/$categoryId/main',
+        );
+
+        await reference.putData(
+          bytes,
+          SettableMetadata(contentType: _contentType(_pickedImage!.name)),
+        );
+
+        imageUrl = await reference.getDownloadURL();
+        imagePath = reference.fullPath;
+      }
+
+      await FirebaseFirestore.instance
+          .collection('categories')
+          .doc(categoryId)
+          .set({
+            'name': name,
+            'imageUrl': imageUrl,
+            'imagePath': imagePath,
+            'createdBy': user.uid,
+            'createdAt': FieldValue.serverTimestamp(),
+            'updatedBy': user.uid,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(catalogError(error))));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final imageUrl = _imageUrlController.text.trim();
+
+    return SafeArea(
+      top: false,
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: SingleChildScrollView(
+          padding: EdgeInsets.only(
+            top: 20,
+            left: 20,
+            right: 20,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+          ),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Add New Category',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: _saving ? null : () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _nameController,
+                  enabled: !_saving,
+                  decoration: InputDecoration(
+                    labelText: 'Category Name',
+                    hintText: 'e.g. Cables & Conductors',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  validator: (value) {
+                    final name = value?.trim() ?? '';
+                    if (name.isEmpty) return 'Please enter a category name';
+                    final exists = widget.existingCategories.any(
+                      (category) =>
+                          category.toLowerCase() == name.toLowerCase(),
+                    );
+                    return exists ? 'Category already exists' : null;
+                  },
+                ),
+                const SizedBox(height: 18),
+                const Text(
+                  'Category Photo (optional)',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  height: 118,
+                  width: double.infinity,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF7F8FA),
+                        border: Border.all(color: Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: _imageBytes != null
+                          ? Image.memory(_imageBytes!, fit: BoxFit.cover)
+                          : imageUrl.isNotEmpty
+                          ? Image.network(
+                              imageUrl,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) =>
+                                  const _CategoryImagePlaceholder(),
+                            )
+                          : const _CategoryImagePlaceholder(),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _saving ? null : _pickImage,
+                        icon: const Icon(Icons.photo_library_outlined),
+                        label: Text(
+                          _pickedImage == null
+                              ? 'Choose Photo'
+                              : 'Change Photo',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    TextButton(
+                      onPressed:
+                          _saving || (_pickedImage == null && imageUrl.isEmpty)
+                          ? null
+                          : () {
+                              setState(() {
+                                _pickedImage = null;
+                                _imageBytes = null;
+                                _imageUrlController.clear();
+                              });
+                            },
+                      child: const Text('Remove'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _imageUrlController,
+                  enabled: !_saving,
+                  keyboardType: TextInputType.url,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    labelText: 'Or paste image URL',
+                    hintText: 'https://...',
+                    prefixIcon: const Icon(Icons.link),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  validator: (value) {
+                    final url = value?.trim() ?? '';
+                    if (url.isEmpty) return null;
+                    final uri = Uri.tryParse(url);
+                    if (uri == null ||
+                        !uri.isAbsolute ||
+                        uri.scheme != 'https') {
+                      return 'Use a valid HTTPS image URL';
+                    }
+                    return null;
+                  },
+                ),
+                const Padding(
+                  padding: EdgeInsets.only(top: 6),
+                  child: Text(
+                    'A gallery photo uploads to Firebase Storage when it is enabled. You can also use a Cloudinary HTTPS URL now.',
+                    style: TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0052FF),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    onPressed: _saving ? null : _save,
+                    child: _saving
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Text(
+                            'Save Category',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CategoryImagePlaceholder extends StatelessWidget {
+  const _CategoryImagePlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.category_outlined, color: Color(0xFF0052FF), size: 32),
+          SizedBox(height: 6),
+          Text('Category photo preview', style: TextStyle(color: Colors.grey)),
+        ],
+      ),
+    );
+  }
 }
 
 class _AdminProductsScreenState extends State<AdminProductsScreen>
@@ -82,128 +415,19 @@ class _AdminProductsScreenState extends State<AdminProductsScreen>
     }
   }
 
-  void _openAddCategorySheet() {
-    final TextEditingController categoryController = TextEditingController();
-    final formKey = GlobalKey<FormState>();
-
-    showModalBottomSheet(
+  Future<void> _openAddCategorySheet() async {
+    final added = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return Padding(
-          padding: EdgeInsets.only(
-            top: 20,
-            left: 20,
-            right: 20,
-            bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-          ),
-          child: Form(
-            key: formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Add New Category',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: categoryController,
-                  decoration: InputDecoration(
-                    labelText: 'Category Name',
-                    hintText: 'e.g. Cables & Conductors',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Please enter a category name';
-                    }
-                    if (_categories.contains(value.trim())) {
-                      return 'Category already exists';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0052FF),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    onPressed: () async {
-                      if (formKey.currentState!.validate()) {
-                        try {
-                          await FirebaseFirestore.instance
-                              .collection('categories')
-                              .doc(
-                                Uri.encodeComponent(
-                                  categoryController.text.trim().toLowerCase(),
-                                ),
-                              )
-                              .set({
-                                'name': categoryController.text.trim(),
-                                'createdBy':
-                                    FirebaseAuth.instance.currentUser!.uid,
-                                'createdAt': FieldValue.serverTimestamp(),
-                              });
-                        } catch (error) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(catalogError(error))),
-                            );
-                          }
-                          return;
-                        }
-                        if (!context.mounted) return;
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              'Category "${categoryController.text.trim()}" added successfully!',
-                            ),
-                          ),
-                        );
-                      }
-                    },
-                    child: const Text(
-                      'Save Category',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+      backgroundColor: Colors.transparent,
+      builder: (_) => _AddCategorySheet(existingCategories: _categories),
     );
+
+    if (added == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Category added successfully!')),
+      );
+    }
   }
 
   void _navigateToAddProductScreen() async {

@@ -33,6 +33,12 @@ flutter:
   assets:
     - assets/logo.png
     - assets/model.png
+    - assets/banner_one.png
+    - assets/banner_two.png
+    - assets/tracon_slider.png
+    - assets/electric.png
+    - assets/agarbatti.png
+    - assets/product_image.png
 
 flutter_launcher_icons:
   android: "launcher_icon"

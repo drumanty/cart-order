@@ -51,6 +51,9 @@ class _AdminSellersScreenState extends State<AdminSellersScreen> {
                   'businessCategory': field('businessCategory'),
                   'gstinOrPan': field('gstPanNumber'),
                   'shopAddress': field('shopAddress'),
+                  'city': field('city'),
+                  'state': field('state'),
+                  'pincode': field('pincode'),
                   'email': field('email'),
                   'mobile': field('mobileNumber'),
                   'status': status,
@@ -439,6 +442,21 @@ class _AdminSellersScreenState extends State<AdminSellersScreen> {
                                       icon: Icons.location_on_outlined,
                                       label: 'Shop Address',
                                       value: seller['shopAddress'],
+                                    ),
+                                    _buildDetailRow(
+                                      icon: Icons.location_on_outlined,
+                                      label: 'city',
+                                      value: seller['city'],
+                                    ),
+                                    _buildDetailRow(
+                                      icon: Icons.location_on_outlined,
+                                      label: 'State',
+                                      value: seller['state'],
+                                    ),
+                                    _buildDetailRow(
+                                      icon: Icons.location_on_outlined,
+                                      label: 'Pincode',
+                                      value: seller['pincode'],
                                     ),
                                     _buildDetailRow(
                                       icon: Icons.email_outlined,

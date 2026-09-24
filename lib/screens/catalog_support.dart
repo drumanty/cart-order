@@ -66,11 +66,24 @@ Map<String, dynamic> catalogProduct(
   return data;
 }
 
+Map<String, String> catalogCategory(
+  DocumentSnapshot<Map<String, dynamic>> doc,
+) {
+  final raw = doc.data() ?? <String, dynamic>{};
+  return {
+    'id': doc.id,
+    'name': (raw['name'] ?? '').toString().trim(),
+    'imageUrl': (raw['imageUrl'] ?? '').toString().trim(),
+    'imagePath': (raw['imagePath'] ?? '').toString().trim(),
+  };
+}
+
 // Each mounted catalog observes Firestore and cancels its listeners on disposal.
 mixin CatalogState<T extends StatefulWidget> on State<T> {
   bool get sellerProductsOnly => false;
   List<Map<String, dynamic>> catalogProducts = [];
   List<String> catalogCategories = [];
+  List<Map<String, String>> catalogCategoryItems = [];
   bool catalogLoading = true;
   String? catalogFailure;
   String? categoryFailure;
@@ -92,6 +105,7 @@ mixin CatalogState<T extends StatefulWidget> on State<T> {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) {
       catalogProducts = [];
+      catalogCategoryItems = [];
       catalogLoading = false;
       catalogFailure = 'Please sign in again.';
       return;
@@ -131,15 +145,19 @@ mixin CatalogState<T extends StatefulWidget> on State<T> {
         .listen(
           (snapshot) {
             if (!mounted) return;
-            final names =
+            final categories =
                 snapshot.docs
-                    .map((d) => (d.data()['name'] ?? '').toString())
-                    .where((n) => n.isNotEmpty)
-                    .toSet()
+                    .map(catalogCategory)
+                    .where((category) => category['name']!.isNotEmpty)
                     .toList()
-                  ..sort();
+                  ..sort((a, b) => a['name']!.compareTo(b['name']!));
+            final names = categories
+                .map((category) => category['name']!)
+                .toSet()
+                .toList();
             setState(() {
               catalogCategories = names;
+              catalogCategoryItems = categories;
               categoryFailure = null;
             });
           },
@@ -147,6 +165,7 @@ mixin CatalogState<T extends StatefulWidget> on State<T> {
             if (mounted) {
               setState(() {
                 catalogCategories = [];
+                catalogCategoryItems = [];
                 categoryFailure = catalogError(error);
               });
             }
@@ -193,6 +212,29 @@ Widget catalogImage(String url, {double? width, double? height}) {
   if (url.isEmpty) return placeholder();
   return Image.network(
     url,
+    width: width,
+    height: height,
+    fit: BoxFit.cover,
+    errorBuilder: (_, __, ___) => placeholder(),
+  );
+}
+
+Widget catalogCategoryImage(
+  String imageUrl, {
+  double? width,
+  double? height,
+  IconData fallbackIcon = Icons.category_outlined,
+}) {
+  Widget placeholder() => Container(
+    width: width,
+    height: height,
+    color: const Color(0xFFEBF2FF),
+    child: Center(child: Icon(fallbackIcon, color: const Color(0xFF0052FF))),
+  );
+
+  if (imageUrl.isEmpty) return placeholder();
+  return Image.network(
+    imageUrl,
     width: width,
     height: height,
     fit: BoxFit.cover,
