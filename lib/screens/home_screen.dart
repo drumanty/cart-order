@@ -1,5 +1,4 @@
 import 'dart:async';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -13,7 +12,6 @@ import 'profile_details_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
-
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
@@ -21,37 +19,34 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
   int _currentBottomIndex = 0;
   int _bannerIndex = 0;
-
   final PageController _bannerController = PageController();
   final ScrollController _categoryScrollController = ScrollController();
-
   Timer? _bannerTimer;
   Timer? _categoryTimer;
-
   StreamSubscription<User?>? _authSubscription;
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
   _profileSubscription;
-
   String? _profileUid;
   String _buyerName = '';
   String _buyerInitials = '';
-
   String _catalogSearch = '';
   String? _catalogCategory;
-
   String _text(dynamic value) => (value ?? '').toString();
-
   List<Map<String, String>> get _categories => [
-    {'name': 'All', 'icon': 'category'},
-    ...catalogCategories.map((name) => {'name': name, 'icon': 'category'}),
+    {'name': 'All', 'icon': 'category', 'imageUrl': ''},
+    ...catalogCategoryItems.map(
+      (category) => {
+        'name': category['name'] ?? '',
+        'icon': 'category',
+        'imageUrl': category['imageUrl'] ?? '',
+      },
+    ),
   ];
-
   List<Map<String, dynamic>> get _visibleProducts {
     return catalogProducts.where((product) {
       final searchableText =
           '${product['productName']} ${product['category']} '
           '${product['sellerShopName']} ${product['id']}';
-
       return product['isActive'] == true &&
           product['status'] == 'Approved' &&
           (_catalogCategory == null ||
@@ -66,7 +61,6 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
     'assets/electric.png',
     'assets/tracon_slider.png',
   ];
-
   @override
   void initState() {
     super.initState();
@@ -80,19 +74,14 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
       (user) {
         _profileSubscription?.cancel();
         _profileSubscription = null;
-
         if (!mounted) return;
-
         setState(() {
           _profileUid = user?.uid;
           _buyerName = '';
           _buyerInitials = '';
         });
-
         if (user == null) return;
-
         final uid = user.uid;
-
         _profileSubscription = FirebaseFirestore.instance
             .collection('users')
             .doc(uid)
@@ -100,21 +89,17 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
             .listen(
               (snapshot) {
                 if (!mounted || _profileUid != uid) return;
-
                 final profile = snapshot.data();
                 final firstName = _text(profile?['firstName']).trim();
                 final lastName = _text(profile?['lastName']).trim();
-
                 final parts = [
                   firstName,
                   lastName,
                 ].where((part) => part.isNotEmpty).toList();
-
                 final initials = parts
                     .map((part) => String.fromCharCode(part.runes.first))
                     .join()
                     .toUpperCase();
-
                 setState(() {
                   _buyerName = parts.join(' ');
                   _buyerInitials = initials;
@@ -122,7 +107,6 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
               },
               onError: (Object error) {
                 if (!mounted || _profileUid != uid) return;
-
                 setState(() {
                   _buyerName = '';
                   _buyerInitials = '';
@@ -133,9 +117,7 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
       onError: (Object error) {
         _profileSubscription?.cancel();
         _profileSubscription = null;
-
         if (!mounted) return;
-
         setState(() {
           _profileUid = null;
           _buyerName = '';
@@ -153,9 +135,7 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
           _bannerController.position.isScrollingNotifier.value) {
         return;
       }
-
       final nextIndex = (_bannerIndex + 1) % _banners.length;
-
       _bannerController.animateToPage(
         nextIndex,
         duration: const Duration(milliseconds: 400),
@@ -172,17 +152,12 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
           _categoryScrollController.position.isScrollingNotifier.value) {
         return;
       }
-
       final maxScroll = _categoryScrollController.position.maxScrollExtent;
-
       if (maxScroll <= 0) return;
-
       final currentScroll = _categoryScrollController.offset;
-
       final targetScroll = currentScroll >= maxScroll - 1
           ? 0.0
           : (currentScroll + 80.0).clamp(0.0, maxScroll).toDouble();
-
       _categoryScrollController.animateTo(
         targetScroll,
         duration: const Duration(milliseconds: 500),
@@ -223,7 +198,6 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
   Widget build(BuildContext context) {
     final categories = _categories;
     final visibleProducts = _visibleProducts;
-
     return Scaffold(
       backgroundColor: const Color(0xFFF7F9FC),
       body: SafeArea(
@@ -315,7 +289,6 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
                   ],
                 ),
               ),
-
               // Search and Upload Query
               Padding(
                 padding: const EdgeInsets.symmetric(
@@ -394,19 +367,17 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-
               // Categories
               SizedBox(
-                height: 95,
+                height: 78,
                 child: ListView.builder(
                   controller: _categoryScrollController,
                   scrollDirection: Axis.horizontal,
                   physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
                   itemCount: categories.length,
                   itemBuilder: (context, index) {
                     final item = categories[index];
-
                     return GestureDetector(
                       onTap: () {
                         setState(() {
@@ -416,40 +387,48 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
                         });
                       },
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        child: Column(
-                          children: [
-                            Container(
-                              width: 58,
-                              height: 58,
-                              decoration: const BoxDecoration(
-                                color: Color(0xFFEBF2FF),
-                                shape: BoxShape.circle,
+                        padding: const EdgeInsets.symmetric(horizontal: 5),
+                        child: SizedBox(
+                          width: 68,
+                          child: Column(
+                            children: [
+                              Container(
+                                width: 44,
+                                height: 44,
+                                clipBehavior: Clip.antiAlias,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFEBF2FF),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: catalogCategoryImage(
+                                  item['imageUrl'] ?? '',
+                                  width: 44,
+                                  height: 44,
+                                  fallbackIcon: _getCategoryIcon(
+                                    item['icon'] ?? 'category',
+                                  ),
+                                ),
                               ),
-                              child: Icon(
-                                _getCategoryIcon(item['icon']!),
-                                color: const Color(0xFF0052FF),
-                                size: 26,
+                              const SizedBox(height: 5),
+                              Text(
+                                item['name']!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              item['name']!,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     );
                   },
                 ),
               ),
-
               // Banner Carousel
-
               // Banner Carousel
               Column(
                 children: [
@@ -463,7 +442,6 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
                       },
                       itemBuilder: (context, index) {
                         final banner = _banners[index];
-
                         return Padding(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 16,
@@ -519,7 +497,6 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
                 ],
               ),
               const SizedBox(height: 12),
-
               // Products
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -545,7 +522,6 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
                           title: _text(product['productName']),
                           price: _text(product['unitPrice']),
                           unit: _text(product['unitTypes']),
-
                           specs: {
                             'Packages:': _text(
                               product['howManyProductsInUnit'],
@@ -620,7 +596,6 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
     required String title,
     required String price,
     required String unit,
-
     required Map<String, String> specs,
   }) {
     return Container(
@@ -805,7 +780,6 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
   }) async {
     try {
       final user = FirebaseAuth.instance.currentUser;
-
       if (user == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -814,14 +788,11 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
         }
         return;
       }
-
       final profile = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
           .get();
-
       final data = profile.data() ?? <String, dynamic>{};
-
       if (data['userType'] != 'Buyer' || data['accountStatus'] != 'approved') {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -832,7 +803,6 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
         }
         return;
       }
-
       await RequestCooldownService.submitEnquiry({
         'buyerId': user.uid,
         'buyerName': '${data['firstName'] ?? ''} ${data['lastName'] ?? ''}'
@@ -847,9 +817,7 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
         'status': 'submitted',
         'createdAt': FieldValue.serverTimestamp(),
       });
-
       if (!mounted) return;
-
       await showDialog<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(

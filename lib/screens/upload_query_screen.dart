@@ -1,27 +1,27 @@
+import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'cloudinary_upload_service.dart';
 
 class UploadQueryScreen extends StatefulWidget {
   const UploadQueryScreen({super.key});
-
   @override
   State<UploadQueryScreen> createState() => _UploadQueryScreenState();
 }
 
 class _UploadQueryScreenState extends State<UploadQueryScreen> {
   final _formKey = GlobalKey<FormState>();
-
   // Controllers
   final TextEditingController _productNameController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
   final TextEditingController _minPriceController = TextEditingController();
   final TextEditingController _maxPriceController = TextEditingController();
-
   int _quantity = 1;
   bool _submitting = false;
-  String _imageUrl = '';
-
+  XFile? _selectedImage;
+  Uint8List? _selectedImageBytes;
   String? _priceError(String? text) {
     final value = double.tryParse((text ?? '').trim());
     if (value == null || !value.isFinite || value < 0 || value > 1000000000) {
@@ -30,62 +30,29 @@ class _UploadQueryScreenState extends State<UploadQueryScreen> {
     return null;
   }
 
-  Future<void> _setImageUrl() async {
-    final controller = TextEditingController(text: _imageUrl);
-    final key = GlobalKey<FormState>();
-    final result = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Product Image Link'),
-        content: Form(
-          key: key,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Photo upload is not configured yet. You can paste an HTTPS image link or leave it blank.',
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: controller,
-                keyboardType: TextInputType.url,
-                decoration: const InputDecoration(hintText: 'https://…'),
-                validator: (value) {
-                  final text = (value ?? '').trim();
-                  if (text.isEmpty) return null;
-                  final uri = Uri.tryParse(text);
-                  if (text.length > 2000 ||
-                      uri == null ||
-                      uri.scheme != 'https' ||
-                      uri.host.isEmpty) {
-                    return 'Enter a valid HTTPS URL';
-                  }
-                  return null;
-                },
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              if (key.currentState!.validate()) {
-                Navigator.pop(dialogContext, controller.text.trim());
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
+  Future<void> _pickImage() async {
+    final image = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+      maxWidth: 1600,
     );
-    // Allow the closing dialog animation to release its text field before disposal.
-    await Future<void>.delayed(const Duration(milliseconds: 300));
-    controller.dispose();
-    if (mounted && result != null) setState(() => _imageUrl = result);
+    if (image == null) return;
+    final bytes = await image.readAsBytes();
+    if (!mounted) return;
+
+    setState(() {
+      _selectedImage = image;
+      _selectedImageBytes = bytes;
+    });
+  }
+
+  Future<String> _uploadSelectedImage() async {
+    final image = _selectedImage;
+    if (image == null) return '';
+    return CloudinaryUploadService.uploadImage(
+      image: image,
+      uploadPreset: CloudinaryUploadService.productPreset,
+    );
   }
 
   @override
@@ -126,6 +93,8 @@ class _UploadQueryScreenState extends State<UploadQueryScreen> {
         }
         return;
       }
+      final imageUrl = await _uploadSelectedImage();
+
       await FirebaseFirestore.instance.collection('product_queries').add({
         'buyerId': user.uid,
         'buyerEmail': user.email ?? '',
@@ -138,7 +107,7 @@ class _UploadQueryScreenState extends State<UploadQueryScreen> {
         'minPrice': double.parse(_minPriceController.text.trim()),
         'maxPrice': double.parse(_maxPriceController.text.trim()),
         'quantity': _quantity,
-        'imageUrl': _imageUrl,
+        'imageUrl': imageUrl,
         'status': 'submitted',
         'createdAt': FieldValue.serverTimestamp(),
       });
@@ -164,6 +133,12 @@ class _UploadQueryScreenState extends State<UploadQueryScreen> {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) Navigator.pop(context);
         });
+      }
+    } on CloudinaryUploadException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
       }
     } on FirebaseException catch (error) {
       if (!mounted) return;
@@ -210,7 +185,7 @@ class _UploadQueryScreenState extends State<UploadQueryScreen> {
                   _buildSectionHeader('Product Image'),
                   const SizedBox(height: 8),
                   InkWell(
-                    onTap: _submitting ? null : _setImageUrl,
+                    onTap: _submitting ? null : _pickImage,
                     borderRadius: BorderRadius.circular(12),
                     child: Container(
                       width: double.infinity,
@@ -223,15 +198,16 @@ class _UploadQueryScreenState extends State<UploadQueryScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          if (_imageUrl.isNotEmpty)
-                            Image.network(
-                              _imageUrl,
+                          if (_selectedImageBytes != null)
+                            Image.memory(
+                              _selectedImageBytes!,
                               height: 60,
                               fit: BoxFit.contain,
-                              errorBuilder: (_, __, ___) => const Icon(
-                                Icons.broken_image_outlined,
-                                size: 32,
-                              ),
+                              errorBuilder: (context, error, stackTrace) =>
+                                  const Icon(
+                                    Icons.broken_image_outlined,
+                                    size: 32,
+                                  ),
                             )
                           else
                             Container(
@@ -248,9 +224,9 @@ class _UploadQueryScreenState extends State<UploadQueryScreen> {
                             ),
                           const SizedBox(height: 8),
                           Text(
-                            _imageUrl.isEmpty
-                                ? 'Add Product Image Link (Optional)'
-                                : 'Image link added — tap to change',
+                            _selectedImageBytes == null
+                                ? 'Select Product Image (Optional)'
+                                : 'Image selected — uploaded when submitted',
                             style: TextStyle(
                               fontSize: 13,
                               color: Colors.grey.shade700,
@@ -262,7 +238,6 @@ class _UploadQueryScreenState extends State<UploadQueryScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-
                   // Product Name
                   _buildSectionHeader('Product Name'),
                   const SizedBox(height: 8),
@@ -283,7 +258,6 @@ class _UploadQueryScreenState extends State<UploadQueryScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-
                   // Price Range (Min & Max)
                   _buildSectionHeader('Price Range'),
                   const SizedBox(height: 8),
@@ -332,7 +306,6 @@ class _UploadQueryScreenState extends State<UploadQueryScreen> {
                     ],
                   ),
                   const SizedBox(height: 20),
-
                   // Quantity
                   _buildSectionHeader('Required Quantity'),
                   const SizedBox(height: 8),
@@ -388,7 +361,6 @@ class _UploadQueryScreenState extends State<UploadQueryScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-
                   // Description
                   _buildSectionHeader('Description'),
                   const SizedBox(height: 8),
@@ -410,7 +382,6 @@ class _UploadQueryScreenState extends State<UploadQueryScreen> {
                     ),
                   ),
                   const SizedBox(height: 28),
-
                   // Submit Button
                   SizedBox(
                     width: double.infinity,

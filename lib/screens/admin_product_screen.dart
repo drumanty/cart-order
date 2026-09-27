@@ -2,12 +2,12 @@ import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'add_product_screen.dart';
 import 'catalog_support.dart';
+import 'cloudinary_upload_service.dart';
 
 class AdminProductsScreen extends StatefulWidget {
   const AdminProductsScreen({super.key});
@@ -50,19 +50,6 @@ class _AddCategorySheetState extends State<_AddCategorySheet> {
     return id.isEmpty ? Uri.encodeComponent(name.trim().toLowerCase()) : id;
   }
 
-  String _contentType(String fileName) {
-    switch (fileName.split('.').last.toLowerCase()) {
-      case 'png':
-        return 'image/png';
-      case 'webp':
-        return 'image/webp';
-      case 'gif':
-        return 'image/gif';
-      default:
-        return 'image/jpeg';
-    }
-  }
-
   Future<void> _pickImage() async {
     final image = await ImagePicker().pickImage(
       source: ImageSource.gallery,
@@ -90,21 +77,13 @@ class _AddCategorySheetState extends State<_AddCategorySheet> {
       final name = _nameController.text.trim();
       final categoryId = _documentId(name);
       var imageUrl = _imageUrlController.text.trim();
-      var imagePath = '';
+      const imagePath = '';
 
       if (_pickedImage != null) {
-        final bytes = _imageBytes ?? await _pickedImage!.readAsBytes();
-        final reference = FirebaseStorage.instance.ref().child(
-          'category_images/$categoryId/main',
+        imageUrl = await CloudinaryUploadService.uploadImage(
+          image: _pickedImage!,
+          uploadPreset: CloudinaryUploadService.categoryPreset,
         );
-
-        await reference.putData(
-          bytes,
-          SettableMetadata(contentType: _contentType(_pickedImage!.name)),
-        );
-
-        imageUrl = await reference.getDownloadURL();
-        imagePath = reference.fullPath;
       }
 
       await FirebaseFirestore.instance
@@ -122,6 +101,11 @@ class _AddCategorySheetState extends State<_AddCategorySheet> {
 
       if (!mounted) return;
       Navigator.pop(context, true);
+    } on CloudinaryUploadException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -260,8 +244,8 @@ class _AddCategorySheetState extends State<_AddCategorySheet> {
                   keyboardType: TextInputType.url,
                   onChanged: (_) => setState(() {}),
                   decoration: InputDecoration(
-                    labelText: 'Or paste image URL',
-                    hintText: 'https://...',
+                    labelText: 'Or paste Cloudinary image URL',
+                    hintText: 'https://res.cloudinary.com/...',
                     prefixIcon: const Icon(Icons.link),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
@@ -282,7 +266,7 @@ class _AddCategorySheetState extends State<_AddCategorySheet> {
                 const Padding(
                   padding: EdgeInsets.only(top: 6),
                   child: Text(
-                    'A gallery photo uploads to Firebase Storage when it is enabled. You can also use a Cloudinary HTTPS URL now.',
+                    'A gallery photo uploads to Cloudinary. You can also paste an existing Cloudinary HTTPS URL.',
                     style: TextStyle(fontSize: 11, color: Colors.grey),
                   ),
                 ),

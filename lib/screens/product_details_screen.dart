@@ -1,15 +1,24 @@
 import 'estimate_service.dart';
+
 import 'cart_screen.dart';
+
 import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
+
 import 'shop_settings.dart';
+
 import 'package:flutter/material.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+
 import 'catalog_support.dart';
+
 import 'request_cooldown_service.dart';
 
 class ProductDetailsScreen extends StatefulWidget {
   final String? productId;
+
   const ProductDetailsScreen({super.key, this.productId});
 
   @override
@@ -19,17 +28,26 @@ class ProductDetailsScreen extends StatefulWidget {
 class _ProductDetailsScreenState extends State<ProductDetailsScreen>
     with TickerProviderStateMixin, CatalogState<ProductDetailsScreen> {
   int _selectedImageIndex = 0;
+
   bool _addingToCart = false;
+
   Future<void> _addToCart() async {
     if (!_canUseBuyerActions || _addingToCart) return;
+
     final id = widget.productId;
+
     if (id == null) return;
+
     setState(() => _addingToCart = true);
+
     try {
       await EstimateService.addProduct(id);
+
       if (!mounted) return;
+
       await Navigator.push(
         context,
+
         MaterialPageRoute(builder: (_) => const CartScreen()),
       );
     } catch (e) {
@@ -47,58 +65,86 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
 
   Future<void> _requestSample() async {
     if (!_canUseBuyerActions || _sendingSample) return;
+
     setState(() => _sendingSample = true);
+
     try {
       final user = FirebaseAuth.instance.currentUser;
+
       final productId = widget.productId;
+
       if (user == null || productId == null) {
         throw StateError('Please sign in as a Buyer.');
       }
+
       final profile = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
           .get();
+
       final buyer = profile.data() ?? <String, dynamic>{};
+
       if (buyer['userType'] != 'Buyer' ||
           buyer['accountStatus'] != 'approved') {
         throw StateError('Only approved Buyers can request samples.');
       }
+
       final product = await FirebaseFirestore.instance
           .collection('products')
           .doc(productId)
           .get();
+
       final p = product.data();
+
       if (p == null || p['isActive'] != true || p['status'] != 'Approved') {
         throw StateError('This product is no longer available.');
       }
+
       await RequestCooldownService.submitSample({
         'buyerId': user.uid,
+
         'userName': '${buyer['firstName'] ?? ''} ${buyer['lastName'] ?? ''}'
             .trim(),
+
         'userMobile': (buyer['mobileNumber'] ?? '').toString(),
+
         'buyerEmail': user.email ?? '',
+
         'buyerAddress': (buyer['shopAddress'] ?? '').toString(),
+
         'shopName': (buyer['shopName'] ?? '').toString(),
+
         'productID': productId,
+
         'productName': (p['productName'] ?? '').toString(),
+
         'sellerId': (p['sellerId'] ?? '').toString(),
+
         'sellerShopName': (p['sellerShopName'] ?? '').toString(),
+
         'sampleImageUrl': (p['frontImage'] ?? '').toString(),
+
         'status': 'Pending',
+
         'createdAt': FieldValue.serverTimestamp(),
       });
+
       if (!mounted) return;
 
       await showDialog<void>(
         context: context,
+
         builder: (c) => AlertDialog(
           title: const Text('Sample request submitted'),
+
           content: const Text(
             'Your sample request has been sent to our support team.',
           ),
+
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(c),
+
               child: const Text('OK'),
             ),
           ],
@@ -130,12 +176,19 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
   }
 
   StreamSubscription<User?>? _authSubscription;
+
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _roleSubscription;
+
   String? _roleUid;
+
   String? _userRole;
+
   bool _approvedBuyer = false;
+
   bool _roleLoading = true;
+
   bool _roleFailed = false;
+
   bool get _canUseBuyerActions =>
       _approvedBuyer &&
       _roleUid != null &&
@@ -145,16 +198,25 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
     _authSubscription = FirebaseAuth.instance.authStateChanges().listen(
       (user) {
         _roleSubscription?.cancel();
+
         if (!mounted) return;
+
         setState(() {
           _roleUid = user?.uid;
+
           _userRole = null;
+
           _approvedBuyer = false;
+
           _roleLoading = user != null;
+
           _roleFailed = false;
         });
+
         if (user == null) return;
+
         final uid = user.uid;
+
         _roleSubscription = FirebaseFirestore.instance
             .collection('users')
             .doc(uid)
@@ -162,31 +224,44 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
             .listen(
               (doc) {
                 if (!mounted || _roleUid != uid) return;
+
                 final data = doc.data();
+
                 setState(() {
                   _userRole = data?['userType']?.toString();
+
                   _approvedBuyer =
                       _userRole == 'Buyer' &&
                       data?['accountStatus'] == 'approved';
+
                   _roleLoading = false;
+
                   _roleFailed = !doc.exists;
                 });
               },
+
               onError: (Object error) {
                 if (!mounted || _roleUid != uid) return;
+
                 setState(() {
                   _approvedBuyer = false;
+
                   _roleLoading = false;
+
                   _roleFailed = true;
                 });
               },
             );
       },
+
       onError: (Object error) {
         if (!mounted) return;
+
         setState(() {
           _approvedBuyer = false;
+
           _roleLoading = false;
+
           _roleFailed = true;
         });
       },
@@ -195,44 +270,126 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
 
   String get _buyerActionMessage {
     if (_roleLoading) return 'Checking account permissions…';
+
     if (_roleFailed) return 'Unable to verify account permissions.';
+
     if (_userRole == 'Buyer') return 'An approved Buyer account is required.';
+
     return 'This function is only for buyers.';
   }
 
   // Animation controllers
+
   AnimationController? _blinkingController;
+
   AnimationController? _moreProductsController;
 
   Map<String, dynamic> _product = {};
+
   late final Stream<QuerySnapshot<Map<String, dynamic>>>? _reviewsStream;
+
   List<QueryDocumentSnapshot<Map<String, dynamic>>> _reviews = [];
+
   bool _reviewsLoading = true;
+
   bool _reviewsFailed = false;
+
   bool _reviewDialogOpen = false;
+
   double get _averageRating => _reviews.isEmpty
       ? 0
       : _reviews.fold<double>(
               0,
+
               (sum, doc) => sum + (doc.data()['rating'] as num).toDouble(),
             ) /
             _reviews.length;
 
   late final Stream<DocumentSnapshot<Map<String, dynamic>>>? _detailsStream;
+
   String get _packages => _product['howManyProductsInUnit'] ?? '';
+
   String get _material => _product['description'] ?? '';
+
   String get _warranty => (_product['warranty'] ?? '').isEmpty
       ? 'Not specified'
       : _product['warranty'];
-  String get _currentRating => _product['unitTypes'] ?? '';
+
+  String get _unitType => (_product['unitTypes'] ?? '').toString();
+
+  String get _currentRating {
+    final rating = (_product['currentRating'] ?? '').toString().trim();
+
+    return rating.isEmpty ? 'Not rated yet' : rating;
+  }
+
   String get _productMrp => _product['mrp'] ?? '';
+
   String get _sellingPrice => _product['sellingPrice'] ?? '';
+
   String get _moq => _product['minOrderQuantity'] ?? '';
+
   List<String> get _images => [
     'frontImage',
+
     'backImage',
-    'sideImage',
   ].map((k) => (_product[k] ?? '').toString()).toList();
+
+  Future<void> _showImageViewer(String imageUrl) async {
+    if (imageUrl.trim().isEmpty) return;
+
+    await showDialog<void>(
+      context: context,
+      barrierColor: Colors.black,
+      builder: (dialogContext) => Dialog.fullscreen(
+        backgroundColor: Colors.black,
+        child: SafeArea(
+          child: Stack(
+            children: [
+              Center(
+                child: InteractiveViewer(
+                  minScale: 0.8,
+                  maxScale: 4,
+                  panEnabled: true,
+                  child: Image.network(
+                    imageUrl,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) => const Center(
+                      child: Icon(
+                        Icons.broken_image_outlined,
+                        color: Colors.white70,
+                        size: 56,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 8,
+                right: 8,
+                child: IconButton(
+                  tooltip: 'Close',
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  icon: const Icon(Icons.close, color: Colors.white),
+                ),
+              ),
+              const Positioned(
+                bottom: 20,
+                left: 0,
+                right: 0,
+                child: Text(
+                  'Pinch to zoom • Drag to move',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   List<Map<String, dynamic>> get _moreProducts => catalogProducts
       .where(
         (p) =>
@@ -246,8 +403,11 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
       .map(
         (p) => {
           ...p,
+
           'title': p['productName'],
+
           'price': p['sellingPrice'],
+
           'icon': Icons.inventory_2_outlined,
         },
       )
@@ -256,7 +416,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
   @override
   void initState() {
     super.initState();
+
     _watchUserRole();
+
     _detailsStream = widget.productId == null || widget.productId!.isEmpty
         ? null
         : FirebaseFirestore.instance
@@ -273,14 +435,18 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
               .snapshots();
 
     // Minimum order badge blinking animation
+
     _blinkingController = AnimationController(
       vsync: this,
+
       duration: Duration(milliseconds: 800),
     )..repeat(reverse: true);
 
     // More Products continuous vertical animation
+
     _moreProductsController = AnimationController(
       vsync: this,
+
       duration: Duration(seconds: 18),
     )..repeat();
   }
@@ -288,9 +454,13 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
   @override
   void dispose() {
     _authSubscription?.cancel();
+
     _roleSubscription?.cancel();
+
     _blinkingController?.dispose();
+
     _moreProductsController?.dispose();
+
     super.dispose();
   }
 
@@ -299,42 +469,58 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
     if (_detailsStream == null) {
       return Scaffold(
         appBar: AppBar(title: Text('Product Details')),
+
         body: Center(child: Text('Select a product from the catalog.')),
       );
     }
+
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
       stream: _detailsStream,
+
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Scaffold(
             appBar: AppBar(title: Text('Product Details')),
+
             body: Center(child: Text(catalogError(snapshot.error!))),
           );
         }
+
         if (!snapshot.hasData) {
           return Scaffold(body: Center(child: CircularProgressIndicator()));
         }
+
         if (!snapshot.data!.exists) {
           return Scaffold(
             appBar: AppBar(title: Text('Product Details')),
+
             body: Center(child: Text('This product is no longer available.')),
           );
         }
+
         _product = catalogProduct(snapshot.data!);
+
         return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: _reviewsStream,
+
           builder: (context, reviewsSnapshot) {
             _reviewsLoading =
                 !reviewsSnapshot.hasData && !reviewsSnapshot.hasError;
+
             _reviewsFailed = reviewsSnapshot.hasError;
+
             _reviews = reviewsSnapshot.data?.docs.toList() ?? [];
+
             _reviews.sort((a, b) {
               final x = a.data()['updatedAt'];
+
               final y = b.data()['updatedAt'];
+
               return (y is Timestamp ? y.millisecondsSinceEpoch : 0).compareTo(
                 x is Timestamp ? x.millisecondsSinceEpoch : 0,
               );
             });
+
             return _buildDetails(context);
           },
         );
@@ -344,66 +530,96 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
 
   Future<void> _writeReview(Map<String, dynamic>? existing) async {
     if (!_canUseBuyerActions || _reviewDialogOpen) return;
+
     final uid = FirebaseAuth.instance.currentUser!.uid;
+
     final productId = widget.productId;
+
     if (productId == null) return;
+
     int rating = (existing?['rating'] as num?)?.toInt() ?? 0;
+
     String reviewText = (existing?['text'] ?? '').toString();
+
     bool saving = false;
+
     String? message;
+
     setState(() => _reviewDialogOpen = true);
+
     try {
       await showDialog<void>(
         context: context,
+
         barrierDismissible: false,
+
         builder: (dialogContext) => StatefulBuilder(
           builder: (context, updateDialog) => PopScope(
             canPop: !saving,
+
             child: AlertDialog(
               title: Text(
                 existing == null ? 'Write a review' : 'Edit your review',
               ),
+
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
+
                   children: [
                     Wrap(
                       children: List.generate(
                         5,
+
                         (index) => IconButton(
                           tooltip: '${index + 1} stars',
+
                           onPressed: saving
                               ? null
                               : () => updateDialog(() => rating = index + 1),
+
                           icon: Icon(
                             index < rating ? Icons.star : Icons.star_border,
+
                             color: Colors.amber,
                           ),
                         ),
                       ),
                     ),
+
                     TextFormField(
                       initialValue: reviewText,
+
                       enabled: !saving,
+
                       maxLength: 1000,
+
                       minLines: 3,
+
                       maxLines: 5,
+
                       decoration: const InputDecoration(
                         labelText: 'Your review',
+
                         border: OutlineInputBorder(),
                       ),
+
                       onChanged: (value) => reviewText = value,
                     ),
+
                     if (message != null)
                       Text(message!, style: const TextStyle(color: Colors.red)),
                   ],
                 ),
               ),
+
               actions: [
                 TextButton(
                   onPressed: saving ? null : () => Navigator.pop(dialogContext),
+
                   child: const Text('Cancel'),
                 ),
+
                 FilledButton(
                   onPressed: saving
                       ? null
@@ -413,20 +629,26 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                               () =>
                                   message = 'Choose stars and write a review.',
                             );
+
                             return;
                           }
+
                           if (!_canUseBuyerActions ||
                               FirebaseAuth.instance.currentUser?.uid != uid) {
                             updateDialog(
                               () => message =
                                   'Please sign in as an approved Buyer.',
                             );
+
                             return;
                           }
+
                           updateDialog(() {
                             saving = true;
+
                             message = null;
                           });
+
                           try {
                             await FirebaseFirestore.instance
                                 .collection('products')
@@ -435,9 +657,12 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                                 .doc(uid)
                                 .set({
                                   'rating': rating,
+
                                   'text': reviewText.trim(),
+
                                   'updatedAt': FieldValue.serverTimestamp(),
                                 });
+
                             if (dialogContext.mounted) {
                               Navigator.pop(dialogContext);
                             }
@@ -445,12 +670,14 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                             if (dialogContext.mounted) {
                               updateDialog(() {
                                 saving = false;
+
                                 message =
                                     'Could not save review. Check connection and permissions.';
                               });
                             }
                           }
                         },
+
                   child: Text(saving ? 'Saving…' : 'Save review'),
                 ),
               ],
@@ -470,38 +697,97 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
 
     return Scaffold(
       backgroundColor: Colors.white,
+
       body: SafeArea(
         child: Column(
           children: [
             // ============================================================
+
             // MAIN SCROLLABLE CONTENT
+
             // ============================================================
             Expanded(
               child: SingleChildScrollView(
                 physics: BouncingScrollPhysics(),
+
                 padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
+
                   children: [
                     // ======================================================
+
                     // LEFT COLUMN
+
                     // ======================================================
                     Expanded(
                       flex: 6,
+
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
+
                         children: [
                           // Main Image Container
                           Container(
                             height: 200,
+
                             width: double.infinity,
+
+                            clipBehavior: Clip.antiAlias,
+
                             decoration: BoxDecoration(
                               color: Color(0xFFF7F8FA),
+
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: catalogImage(
-                              _images[_selectedImageIndex],
-                              height: 200,
+
+                            child: Material(
+                              color: Colors.transparent,
+
+                              child: InkWell(
+                                onTap: () => _showImageViewer(
+                                  _images[_selectedImageIndex],
+                                ),
+
+                                child: Stack(
+                                  fit: StackFit.expand,
+
+                                  children: [
+                                    catalogImage(
+                                      _images[_selectedImageIndex],
+
+                                      height: 200,
+                                    ),
+
+                                    const Positioned(
+                                      right: 10,
+
+                                      bottom: 10,
+
+                                      child: DecoratedBox(
+                                        decoration: BoxDecoration(
+                                          color: Colors.black54,
+
+                                          shape: BoxShape.circle,
+                                        ),
+
+                                        child: Padding(
+                                          padding: EdgeInsets.all(7),
+
+                                          child: Icon(
+                                            Icons.zoom_in,
+
+                                            color: Colors.white,
+
+                                            size: 20,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
 
@@ -509,7 +795,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
 
                           // Thumbnails
                           Row(
-                            children: List.generate(3, (index) {
+                            children: List.generate(_images.length, (index) {
                               final isSelected = _selectedImageIndex == index;
 
                               return GestureDetector(
@@ -518,23 +804,33 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                                     _selectedImageIndex = index;
                                   });
                                 },
+
                                 child: Container(
                                   width: 42,
+
                                   height: 42,
+
                                   margin: EdgeInsets.only(right: 8),
+
                                   decoration: BoxDecoration(
                                     color: Color(0xFFF7F8FA),
+
                                     borderRadius: BorderRadius.circular(8),
+
                                     border: Border.all(
                                       color: isSelected
                                           ? Color(0xFF0052FF)
                                           : Colors.grey.shade300,
+
                                       width: isSelected ? 2 : 1,
                                     ),
                                   ),
+
                                   child: catalogImage(
                                     _images[index],
+
                                     width: 42,
+
                                     height: 42,
                                   ),
                                 ),
@@ -547,9 +843,12 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                           // Product Title
                           Text(
                             _product['productName'],
+
                             style: TextStyle(
                               fontSize: 18,
+
                               fontWeight: FontWeight.bold,
+
                               color: Colors.black,
                             ),
                           ),
@@ -558,27 +857,39 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
 
                           const Text(
                             'Unit Price',
+
                             style: TextStyle(fontSize: 12),
                           ),
+
                           // Price
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.baseline,
+
                             textBaseline: TextBaseline.alphabetic,
+
                             children: [
                               Text(
                                 (_product['unitPrice'] ?? '').toString(),
+
                                 style: TextStyle(
                                   fontSize: 20,
+
                                   fontWeight: FontWeight.bold,
+
                                   color: Color(0xFF0052FF),
                                 ),
                               ),
+
                               SizedBox(width: 8),
+
                               Text(
                                 (_product['mrpUnitPrice'] ?? '').toString(),
+
                                 style: TextStyle(
                                   fontSize: 12,
+
                                   color: Colors.grey.shade500,
+
                                   decoration: TextDecoration.lineThrough,
                                 ),
                               ),
@@ -589,19 +900,25 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
 
                           Text(
                             '${_product['stockStatus']} • ${_product['status']}',
+
                             style: TextStyle(
                               color: _product['inStock'] == true
                                   ? Colors.green
                                   : Colors.red,
                             ),
                           ),
+
                           SizedBox(height: 8),
+
                           // Product Highlights
                           Text(
                             'Product Highlights',
+
                             style: TextStyle(
                               fontSize: 14,
+
                               fontWeight: FontWeight.bold,
+
                               color: Colors.black,
                             ),
                           ),
@@ -610,44 +927,61 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
 
                           _buildHighlightRow(
                             icon: Icons.currency_rupee_outlined,
+
                             label: 'Product Mrp',
+
                             value: _productMrp,
                           ),
 
                           _buildHighlightRow(
                             icon: Icons.currency_rupee_outlined,
+
                             label: 'Selling Price',
+
                             value: _sellingPrice,
                           ),
 
                           _buildHighlightRow(
                             icon: Icons.electric_meter_outlined,
+
                             label: 'Unit Type',
-                            value: _currentRating,
+
+                            value: _unitType,
                           ),
 
                           _buildHighlightRow(
                             icon: Icons.widgets_outlined,
+
                             label: 'Packages',
+
                             value: _packages,
                           ),
 
                           _buildHighlightRow(
                             icon: Icons.production_quantity_limits,
+
                             label: 'Minimum Order Quantity',
+
                             value: _moq.toString(),
+
                             isLongText: true,
                           ),
+
                           _buildHighlightRow(
                             icon: Icons.verified_outlined,
+
                             label: 'Warranty',
+
                             value: _warranty,
                           ),
 
                           _buildHighlightRow(
                             icon: Icons.description_outlined,
+
                             label: 'Description',
+
                             value: _material,
+
                             isLongText: true,
                           ),
 
@@ -659,37 +993,53 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                     SizedBox(width: 12),
 
                     // ======================================================
+
                     // RIGHT COLUMN
+
                     // ======================================================
                     Expanded(
                       flex: 4,
+
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
+
                         children: [
                           // ==================================================
+
                           // STORE DETAILS
+
                           // ==================================================
                           Container(
                             padding: EdgeInsets.all(12),
+
                             decoration: BoxDecoration(
                               color: Colors.white,
+
                               borderRadius: BorderRadius.circular(12),
+
                               border: Border.all(color: Colors.grey.shade200),
                             ),
+
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
+
                               children: [
                                 Row(
                                   children: [
                                     Container(
                                       padding: EdgeInsets.all(6),
+
                                       decoration: BoxDecoration(
                                         color: Color(0xFF0052FF),
+
                                         shape: BoxShape.circle,
                                       ),
+
                                       child: Icon(
                                         Icons.storefront,
+
                                         color: Colors.white,
+
                                         size: 18,
                                       ),
                                     ),
@@ -700,8 +1050,10 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
 
                                 Text(
                                   'Seller ID: ${_product['sellerId']}',
+
                                   style: TextStyle(
                                     fontSize: 12,
+
                                     color: Colors.grey.shade600,
                                   ),
                                 ),
@@ -710,8 +1062,10 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
 
                                 Text(
                                   _product['sellerShopName'],
+
                                   style: TextStyle(
                                     fontSize: 14,
+
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
@@ -720,19 +1074,27 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
 
                                 Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
+
                                   children: [
                                     Icon(
                                       Icons.location_on_outlined,
+
                                       size: 14,
+
                                       color: Colors.grey.shade600,
                                     ),
+
                                     SizedBox(width: 2),
+
                                     Expanded(
                                       child: Text(
                                         _product['sellerShopAddress'],
+
                                         style: TextStyle(
                                           fontSize: 13,
+
                                           color: Colors.grey.shade600,
+
                                           height: 1.2,
                                         ),
                                       ),
@@ -746,6 +1108,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                                 if (_blinkingController != null)
                                   FadeTransition(
                                     opacity: _blinkingController!,
+
                                     child: minOrderBadge,
                                   )
                                 else
@@ -757,17 +1120,23 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                           SizedBox(height: 16),
 
                           // ==================================================
+
                           // MORE PRODUCTS HEADER
+
                           // ==================================================
                           Padding(
                             padding: EdgeInsets.only(
                               left: 16.0,
                             ), // Adjust the value as needed
+
                             child: Text(
                               'More Products',
+
                               style: TextStyle(
                                 fontSize: 13,
+
                                 color: Color(0xFF0052FF),
+
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -776,7 +1145,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                           SizedBox(height: 10),
 
                           // ==================================================
+
                           // CONTINUOUS BOTTOM -> TOP PRODUCTS
+
                           // ==================================================
                           _buildMoreProductsAnimation(),
                         ],
@@ -788,62 +1159,84 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
             ),
 
             // ============================================================
+
             // FIXED BOTTOM ACTION BAR
+
             // ============================================================
             Container(
               padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+
               decoration: BoxDecoration(
                 color: Colors.white,
+
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.05),
+
                     blurRadius: 10,
+
                     offset: Offset(0, -3),
                   ),
                 ],
               ),
+
               child: Column(
                 mainAxisSize: MainAxisSize.min,
+
                 children: [
                   Row(
                     children: [
                       // Sample Button
                       Expanded(
                         flex: 4,
+
                         child: OutlinedButton(
                           onPressed: _canUseBuyerActions && !_sendingSample
                               ? _requestSample
                               : null,
+
                           style: OutlinedButton.styleFrom(
                             padding: EdgeInsets.symmetric(vertical: 10),
+
                             side: BorderSide(
                               color: _canUseBuyerActions
                                   ? Color(0xFF0052FF)
                                   : Colors.grey,
                             ),
+
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(8),
                             ),
                           ),
+
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
+
                             children: [
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
+
                                 children: [
                                   Icon(
                                     Icons.inventory_2_outlined,
+
                                     size: 14,
+
                                     color: _canUseBuyerActions
                                         ? Color(0xFF0052FF)
                                         : Colors.grey,
                                   ),
+
                                   SizedBox(width: 4),
+
                                   Text(
                                     'Sample',
+
                                     style: TextStyle(
                                       fontSize: 14,
+
                                       fontWeight: FontWeight.bold,
+
                                       color: _canUseBuyerActions
                                           ? Color(0xFF0052FF)
                                           : Colors.grey,
@@ -851,12 +1244,15 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                                   ),
                                 ],
                               ),
+
                               Text(
                                 _sendingSample
                                     ? 'Submitting…'
                                     : 'Get product sample',
+
                                 style: TextStyle(
                                   fontSize: 10,
+
                                   color: Colors.grey,
                                 ),
                               ),
@@ -870,6 +1266,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                       // Add To Cart Button
                       Expanded(
                         flex: 5,
+
                         child: ElevatedButton(
                           onPressed:
                               _canUseBuyerActions &&
@@ -878,28 +1275,41 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                                   !_addingToCart
                               ? _addToCart
                               : null,
+
                           style: ElevatedButton.styleFrom(
                             padding: EdgeInsets.symmetric(vertical: 14),
+
                             backgroundColor: Color(0xFF0052FF),
+
                             elevation: 0,
+
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(8),
                             ),
                           ),
+
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
+
                             children: [
                               Icon(
                                 Icons.shopping_cart_outlined,
+
                                 size: 16,
+
                                 color: Colors.white,
                               ),
+
                               SizedBox(width: 6),
+
                               Text(
                                 _addingToCart ? 'Adding…' : 'Add to Cart',
+
                                 style: TextStyle(
                                   fontSize: 14,
+
                                   fontWeight: FontWeight.bold,
+
                                   color: Colors.white,
                                 ),
                               ),
@@ -909,11 +1319,15 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                       ),
                     ],
                   ),
+
                   if (!_canUseBuyerActions) ...[
                     const SizedBox(height: 8),
+
                     Text(
                       _buyerActionMessage,
+
                       textAlign: TextAlign.center,
+
                       style: const TextStyle(fontSize: 12, color: Colors.grey),
                     ),
                   ],
@@ -927,36 +1341,47 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
   }
 
   // ======================================================================
+
   // MORE PRODUCTS ANIMATION
+
   // ======================================================================
 
   Widget _buildMoreProductsAnimation() {
     double itemHeight = 52.0;
+
     double viewportHeight = 380.0;
 
     final int itemCount = _moreProducts.length;
+
     if (catalogLoading || catalogFailure != null) {
       return SizedBox(height: viewportHeight, child: catalogNotice());
     }
+
     if (itemCount == 0) {
       return SizedBox(
         height: viewportHeight,
+
         child: Center(child: Text('No other products from this seller.')),
       );
     }
 
     return SizedBox(
       height: viewportHeight,
+
       width: double.infinity,
+
       child: ClipRect(
         child: AnimatedBuilder(
           animation: _moreProductsController!,
+
           builder: (context, child) {
             final double totalHeight = itemCount * itemHeight;
+
             final double offset = _moreProductsController!.value * totalHeight;
 
             return Stack(
               clipBehavior: Clip.hardEdge,
+
               children: List.generate(itemCount, (index) {
                 double y = (index * itemHeight - offset) % totalHeight;
 
@@ -966,18 +1391,24 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
 
                 return Positioned(
                   left: 0,
+
                   right: 0,
+
                   top: y,
+
                   height: itemHeight,
+
                   child: GestureDetector(
                     onTap: () => Navigator.push(
                       context,
+
                       MaterialPageRoute(
                         builder: (_) => ProductDetailsScreen(
                           productId: _moreProducts[index]['id'],
                         ),
                       ),
                     ),
+
                     child: _buildMoreProductItem(_moreProducts[index]),
                   ),
                 );
@@ -992,20 +1423,30 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
   Widget _buildMoreProductItem(Map<String, dynamic> item) {
     return Padding(
       padding: EdgeInsets.only(bottom: 8),
+
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
+
         children: [
           Container(
             width: 36,
+
             height: 36,
+
+            clipBehavior: Clip.antiAlias,
+
             decoration: BoxDecoration(
               color: Color(0xFFF7F8FA),
+
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(
-              item['icon'] as IconData,
-              size: 18,
-              color: Colors.grey.shade700,
+
+            child: catalogImage(
+              (item['frontImage'] ?? '').toString(),
+
+              width: 36,
+
+              height: 36,
             ),
           ),
 
@@ -1014,18 +1455,27 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
           Expanded(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
+
               crossAxisAlignment: CrossAxisAlignment.start,
+
               mainAxisSize: MainAxisSize.min,
+
               children: [
                 Text(
                   item['title'] as String,
+
                   style: TextStyle(
                     fontSize: 11,
+
                     fontWeight: FontWeight.w600,
+
                     color: Colors.black87,
+
                     height: 1.1,
                   ),
+
                   maxLines: 2,
+
                   overflow: TextOverflow.ellipsis,
                 ),
 
@@ -1033,9 +1483,12 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
 
                 Text(
                   item['price'] as String,
+
                   style: TextStyle(
                     fontSize: 11,
+
                     fontWeight: FontWeight.bold,
+
                     color: Color(0xFF0052FF),
                   ),
                 ),
@@ -1048,23 +1501,30 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
   }
 
   // ======================================================================
+
   // PRODUCT HIGHLIGHT ROW
+
   // ======================================================================
 
   Widget _buildHighlightRow({
     required IconData icon,
+
     required String label,
+
     required String value,
+
     bool isLongText = false,
   }) {
     return Padding(
       padding: EdgeInsets.only(bottom: 10.0),
+
       child: Column(
         children: [
           Row(
             crossAxisAlignment: isLongText
                 ? CrossAxisAlignment.start
                 : CrossAxisAlignment.center,
+
             children: [
               Icon(icon, size: 16, color: Color(0xFF0052FF)),
 
@@ -1072,11 +1532,15 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
 
               SizedBox(
                 width: 75,
+
                 child: Text(
                   label,
+
                   style: TextStyle(
                     fontSize: 10.5,
+
                     fontWeight: FontWeight.w600,
+
                     color: Colors.grey.shade700,
                   ),
                 ),
@@ -1085,10 +1549,14 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
               Expanded(
                 child: Text(
                   value,
+
                   style: TextStyle(
                     fontSize: 10.5,
+
                     fontWeight: FontWeight.w500,
+
                     color: Colors.black87,
+
                     height: 1.3,
                   ),
                 ),

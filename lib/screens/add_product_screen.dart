@@ -1,21 +1,20 @@
+import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-
+import 'package:image_picker/image_picker.dart';
 import 'catalog_support.dart';
+import 'cloudinary_upload_service.dart';
 
 class AddProductScreen extends StatefulWidget {
   final List<String> categories;
-
   const AddProductScreen({super.key, required this.categories});
-
   @override
   State<AddProductScreen> createState() => _AddProductScreenState();
 }
 
 class _AddProductScreenState extends State<AddProductScreen> {
   final _formKey = GlobalKey<FormState>();
-
   final _nameController = TextEditingController();
   final _sellerPriceController = TextEditingController();
   final _marginController = TextEditingController();
@@ -26,27 +25,27 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final _minOrderController = TextEditingController();
   final _howManyInUnitController = TextEditingController();
   final _unitTypeController = TextEditingController();
+  final _currentRatingController = TextEditingController();
   final _warrantyController = TextEditingController();
   final _descController = TextEditingController();
-
   late String _selectedCategory;
   String? _sellerId;
   bool _saving = false;
-
+  XFile? _frontImage;
+  XFile? _backImage;
+  Uint8List? _frontImageBytes;
+  Uint8List? _backImageBytes;
   final _sellerStream = FirebaseFirestore.instance
       .collection('users')
       .where('userType', isEqualTo: 'Seller')
       .snapshots();
-
   List<String> get _categoryOptions => widget.categories.toSet().toList();
-
   @override
   void initState() {
     super.initState();
     _selectedCategory = widget.categories.isNotEmpty
         ? widget.categories.first
         : 'General';
-
     for (final controller in [
       _sellerPriceController,
       _marginController,
@@ -70,6 +69,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
       _minOrderController,
       _howManyInUnitController,
       _unitTypeController,
+      _currentRatingController,
       _warrantyController,
       _descController,
     ]) {
@@ -97,7 +97,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
     final margin = _number(_marginController.text);
     final quantity = int.tryParse(_howManyInUnitController.text.trim());
     final mrp = _number(_mrpController.text);
-
     if (sellerPrice == null ||
         sellerPrice < 0 ||
         margin == null ||
@@ -107,7 +106,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
       _setCalculatedText(_mrpUnitPriceController, null);
       return;
     }
-
     final actualSellingPrice = sellerPrice * (1 + margin / 100);
     _setCalculatedText(_actualSellingPriceController, actualSellingPrice);
     _setCalculatedText(
@@ -122,17 +120,49 @@ class _AddProductScreenState extends State<AddProductScreen> {
     );
   }
 
+  Future<void> _pickProductImage(String slot) async {
+    final image = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+      maxWidth: 1600,
+    );
+    if (image == null) return;
+    final bytes = await image.readAsBytes();
+    if (!mounted) return;
+    setState(() {
+      if (slot == 'front') {
+        _frontImage = image;
+        _frontImageBytes = bytes;
+      } else if (slot == 'back') {
+        _backImage = image;
+        _backImageBytes = bytes;
+      }
+    });
+  }
+
+  Future<String> _uploadProductImage(XFile? image) async {
+    if (image == null) return '';
+    return CloudinaryUploadService.uploadImage(
+      image: image,
+      uploadPreset: CloudinaryUploadService.productPreset,
+    );
+  }
+
   Future<void> _submitProduct() async {
     _recalculatePrices();
     if (_saving || !_formKey.currentState!.validate()) return;
     if (_sellerId == null) return;
-
+    if (_frontImage == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a front product image.')),
+      );
+      return;
+    }
     final sellerPrice = _number(_sellerPriceController.text);
     final margin = _number(_marginController.text);
     final mrp = _number(_mrpController.text);
     final moq = int.tryParse(_minOrderController.text.trim());
     final quantity = int.tryParse(_howManyInUnitController.text.trim());
-
     if (sellerPrice == null ||
         sellerPrice < 0 ||
         margin == null ||
@@ -153,13 +183,11 @@ class _AddProductScreenState extends State<AddProductScreen> {
       );
       return;
     }
-
     // Keep the stored values unrounded so the Firestore rule can verify the
     // formula exactly. The UI displays these values rounded to two decimals.
     final actualSellingPrice = sellerPrice * (1 + margin / 100);
     final unitPrice = actualSellingPrice / quantity;
     final mrpUnitPrice = mrp / quantity;
-
     if (mrp < actualSellingPrice) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -168,12 +196,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
       );
       return;
     }
-
     setState(() => _saving = true);
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw StateError('Signed out');
-
       final seller = await FirebaseFirestore.instance
           .collection('users')
           .doc(_sellerId)
@@ -184,7 +210,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
           profile['accountStatus'] != 'approved') {
         throw StateError('Choose an approved seller.');
       }
-
+      final frontImageUrl = await _uploadProductImage(_frontImage);
+      final backImageUrl = await _uploadProductImage(_backImage);
       await FirebaseFirestore.instance.collection('products').doc().set({
         'productName': _nameController.text.trim(),
         'category': _selectedCategory,
@@ -193,7 +220,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
             '${profile['firstName'] ?? ''} ${profile['lastName'] ?? ''}'.trim(),
         'sellerShopName': (profile['shopName'] ?? '').toString(),
         'sellerShopAddress': (profile['shopAddress'] ?? '').toString(),
-
         // Seller base price + Admin margin + calculated buyer prices.
         'sellerSellingPrice': sellerPrice,
         'marginPercent': margin,
@@ -203,15 +229,17 @@ class _AddProductScreenState extends State<AddProductScreen> {
         'mrp': mrp,
         'unitPrice': unitPrice,
         'mrpUnitPrice': mrpUnitPrice,
-
         'minOrderQuantity': moq,
         'howManyProductsInUnit': quantity,
         'unitTypes': _unitTypeController.text.trim(),
+        'currentRating': _currentRatingController.text.trim(),
         'warranty': _warrantyController.text.trim(),
         'description': _descController.text.trim(),
-        'frontImage': '',
-        'backImage': '',
+        'frontImage': frontImageUrl,
+        'backImage': backImageUrl,
+        // Kept for compatibility with existing Firestore product rules.
         'sideImage': '',
+        // Buyer reviews keep their own numeric values in the reviews subcollection.
         'ratings': 0,
         'reviewCount': 0,
         'status': 'Approved',
@@ -223,8 +251,13 @@ class _AddProductScreenState extends State<AddProductScreen> {
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
-
       if (mounted) Navigator.pop(context, true);
+    } on CloudinaryUploadException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+      }
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -241,14 +274,12 @@ class _AddProductScreenState extends State<AddProductScreen> {
     builder: (context, snapshot) {
       if (snapshot.hasError) return Text(catalogError(snapshot.error!));
       if (!snapshot.hasData) return const LinearProgressIndicator();
-
       final sellers = snapshot.data!.docs
           .where((doc) => doc.data()['accountStatus'] == 'approved')
           .toList();
       if (sellers.isEmpty) {
         return const Text('Approve a Seller account before adding products.');
       }
-
       final selected = sellers.any((doc) => doc.id == _sellerId)
           ? _sellerId
           : null;
@@ -277,7 +308,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
       );
     },
   );
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -300,9 +330,29 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
+              Row(
+                children: [
+                  _buildImagePicker(
+                    label: 'Front View *',
+                    bytes: _frontImageBytes,
+                    onTap: _saving ? null : () => _pickProductImage('front'),
+                  ),
+                  const SizedBox(width: 8),
+                  _buildImagePicker(
+                    label: 'Back View',
+                    bytes: _backImageBytes,
+                    onTap: _saving ? null : () => _pickProductImage('back'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Front image is required. Tap an image box to choose or replace it.',
+                style: TextStyle(fontSize: 11, color: Colors.grey),
+              ),
+              const SizedBox(height: 16),
               _sellerField(),
               const SizedBox(height: 16),
-
               const Text(
                 'Basic Information',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -343,7 +393,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
                       },
               ),
               const SizedBox(height: 20),
-
               const Text(
                 'Pricing Details',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -443,7 +492,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-
               const Text(
                 'Packaging & Specifications',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -494,6 +542,20 @@ class _AddProductScreenState extends State<AddProductScreen> {
                       decoration: _inputDecoration(
                         'Unit Type',
                         hint: 'Box / Bundle',
+                      ),
+                      validator: (value) =>
+                          value == null || value.trim().isEmpty
+                          ? 'Required'
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _currentRatingController,
+                      decoration: _inputDecoration(
+                        'Current Rating',
+                        hint: 'e.g. Top Rated / 4.5 Stars',
                       ),
                       validator: (value) =>
                           value == null || value.trim().isEmpty
@@ -579,29 +641,66 @@ class _AddProductScreenState extends State<AddProductScreen> {
     );
   }
 
-  Widget _buildImagePlaceholder(String label) {
+  Widget _buildImagePicker({
+    required String label,
+    required Uint8List? bytes,
+    required VoidCallback? onTap,
+  }) {
     return Expanded(
-      child: Container(
-        height: 85,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.grey.shade300),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.add_a_photo_outlined,
-              color: Color(0xFF0052FF),
-              size: 22,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(fontSize: 10, color: Colors.grey.shade700),
-            ),
-          ],
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          height: 85,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey.shade300),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(7),
+            child: bytes == null
+                ? Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.add_a_photo_outlined,
+                        color: Color(0xFF0052FF),
+                        size: 22,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        label,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                    ],
+                  )
+                : Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Image.memory(bytes, fit: BoxFit.cover),
+                      const Align(
+                        alignment: Alignment.bottomRight,
+                        child: Padding(
+                          padding: EdgeInsets.all(4),
+                          child: CircleAvatar(
+                            radius: 11,
+                            backgroundColor: Color(0xCC0052FF),
+                            child: Icon(
+                              Icons.edit,
+                              size: 13,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
         ),
       ),
     );

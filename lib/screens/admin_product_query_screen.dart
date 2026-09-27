@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 
 class AdminProductQueryScreen extends StatefulWidget {
   const AdminProductQueryScreen({super.key});
-
   @override
   State<AdminProductQueryScreen> createState() =>
       _AdminProductQueryScreenState();
@@ -14,16 +13,14 @@ class AdminProductQueryScreen extends StatefulWidget {
 class _AdminProductQueryScreenState extends State<AdminProductQueryScreen> {
   Future<void> _copyValue(String label, String value) async {
     final text = value.trim();
-
     if (text.isEmpty || text.toLowerCase() == 'not provided') {
       _message('No ${label.toLowerCase()} available.');
       return;
     }
-
     try {
       await Clipboard.setData(ClipboardData(text: text));
       if (mounted) _message('$label copied.');
-    } catch (_) {
+    } catch (error) {
       if (mounted) _message('Could not copy ${label.toLowerCase()}.');
     }
   }
@@ -31,7 +28,6 @@ class _AdminProductQueryScreenState extends State<AdminProductQueryScreen> {
   Widget _copyDetail(String label, dynamic value) {
     final text = (value ?? '').toString().trim();
     final available = text.isNotEmpty && text.toLowerCase() != 'not provided';
-
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
@@ -60,54 +56,92 @@ class _AdminProductQueryScreenState extends State<AdminProductQueryScreen> {
     );
   }
 
+  Future<void> _showImageViewer(String imageUrl) async {
+    await showDialog<void>(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (dialogContext) => Dialog.fullscreen(
+        backgroundColor: Colors.black,
+        child: SafeArea(
+          child: Stack(
+            children: [
+              Center(
+                child: InteractiveViewer(
+                  minScale: 1,
+                  maxScale: 4,
+                  child: Image.network(
+                    imageUrl,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) => const Center(
+                      child: Text(
+                        'Image could not be loaded.',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 8,
+                right: 8,
+                child: IconButton.filled(
+                  tooltip: 'Close image',
+                  onPressed: () => Navigator.pop(dialogContext),
+                  icon: const Icon(Icons.close),
+                ),
+              ),
+              const Positioned(
+                left: 0,
+                right: 0,
+                bottom: 20,
+                child: Text(
+                  'Pinch to zoom',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   final Map<String, TextEditingController> _commentControllers = {};
   final Set<String> _busy = {};
-
   final TextEditingController _searchController = TextEditingController();
-
   final Stream<QuerySnapshot<Map<String, dynamic>>> _queriesStream =
       FirebaseFirestore.instance.collection('product_queries').snapshots();
-
   final Map<String, Stream<QuerySnapshot<Map<String, dynamic>>>>
   _activityStreams = {};
-
   final _scrollBehavior = const MaterialScrollBehavior().copyWith(
     scrollbars: false,
     overscroll: false,
   );
-
   String _filter = 'All';
   String _search = '';
-
   static const List<String> _statuses = [
     'submitted',
     'in_review',
     'resolved',
     'rejected',
   ];
-
   @override
   void dispose() {
     _searchController.dispose();
-
     for (final c in _commentControllers.values) {
       c.dispose();
     }
-
     super.dispose();
   }
 
   TextEditingController _controller(String id) =>
       _commentControllers.putIfAbsent(id, () => TextEditingController());
-
   String _text(dynamic value) => (value ?? '').toString().trim();
-
   String _normalize(String value) =>
       value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
-
   String _normalizeStatus(dynamic value) {
     final result = _normalize(_text(value)).replaceAll(RegExp(r'[\s-]+'), '_');
-
     return result.isEmpty ? 'submitted' : result;
   }
 
@@ -120,7 +154,6 @@ class _AdminProductQueryScreenState extends State<AdminProductQueryScreen> {
             : '${part[0].toUpperCase()}${part.substring(1)}',
       )
       .join(' ');
-
   Color _statusColor(String status) {
     switch (_normalizeStatus(status)) {
       case 'resolved':
@@ -144,7 +177,6 @@ class _AdminProductQueryScreenState extends State<AdminProductQueryScreen> {
     if (value is Timestamp) {
       return value.toDate().toLocal().toString().substring(0, 16);
     }
-
     final text = _text(value);
     return text.isEmpty ? 'Pending' : text;
   }
@@ -163,16 +195,13 @@ class _AdminProductQueryScreenState extends State<AdminProductQueryScreen> {
 
   bool _matchesSearch(Map<String, dynamic> data) {
     if (_search.isEmpty) return true;
-
     final buyerName = _normalize(_text(data['buyerName']));
     final buyerId = _normalize(_text(data['buyerId']));
-
     return buyerName.contains(_search) || buyerId.contains(_search);
   }
 
   void _message(String text) {
     if (!mounted) return;
-
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(text)));
@@ -180,26 +209,20 @@ class _AdminProductQueryScreenState extends State<AdminProductQueryScreen> {
 
   Future<void> _updateStatus(String id, String status) async {
     if (_busy.contains(id) || !_statuses.contains(status)) return;
-
     setState(() => _busy.add(id));
-
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) throw StateError('Signed out');
-
       final queryRef = FirebaseFirestore.instance
           .collection('product_queries')
           .doc(id);
-
       final activityRef = queryRef.collection('activity').doc();
       final batch = FirebaseFirestore.instance.batch();
-
       batch.update(queryRef, {
         'status': status,
         'updatedBy': uid,
         'updatedAt': FieldValue.serverTimestamp(),
       });
-
       batch.set(activityRef, {
         'type': 'status',
         'status': status,
@@ -208,13 +231,11 @@ class _AdminProductQueryScreenState extends State<AdminProductQueryScreen> {
         'sender': 'Admin',
         'createdAt': FieldValue.serverTimestamp(),
       });
-
       await batch.commit();
-
       if (mounted) {
         _message('Status updated to ${_label(status)}.');
       }
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
         _message(
           'Could not update status. Check your connection and Admin access.',
@@ -228,27 +249,20 @@ class _AdminProductQueryScreenState extends State<AdminProductQueryScreen> {
   Future<void> _postComment(String id) async {
     final c = _controller(id);
     final text = c.text.trim();
-
     if (text.isEmpty || _busy.contains(id)) return;
-
     if (text.length > 5000) {
       _message('Please keep your comment within 5,000 characters.');
       return;
     }
-
     setState(() => _busy.add(id));
-
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) throw StateError('Signed out');
-
       final queryRef = FirebaseFirestore.instance
           .collection('product_queries')
           .doc(id);
-
       final activityRef = queryRef.collection('activity').doc();
       final batch = FirebaseFirestore.instance.batch();
-
       batch.set(activityRef, {
         'type': 'comment',
         'text': text,
@@ -256,19 +270,15 @@ class _AdminProductQueryScreenState extends State<AdminProductQueryScreen> {
         'sender': 'Admin',
         'createdAt': FieldValue.serverTimestamp(),
       });
-
       batch.update(queryRef, {
         'updatedBy': uid,
         'updatedAt': FieldValue.serverTimestamp(),
       });
-
       await batch.commit();
-
       if (!mounted) return;
-
       if (c.text.trim() == text) c.clear();
       _message('Comment posted successfully.');
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
         _message(
           'Could not post comment. Check your connection and Admin access.',
@@ -358,37 +368,28 @@ class _AdminProductQueryScreenState extends State<AdminProductQueryScreen> {
                       ),
                     );
                   }
-
                   if (!snapshot.hasData) {
                     return const Center(child: CircularProgressIndicator());
                   }
-
                   final allDocs = snapshot.data!.docs;
-
                   if (allDocs.isEmpty) {
                     return const Center(
                       child: Text('No product queries uploaded yet.'),
                     );
                   }
-
                   final visible = allDocs.where((doc) {
                     final data = doc.data();
-
                     final matchesStatus =
                         _filter == 'All' ||
                         _normalizeStatus(data['status']) == _filter;
-
                     return matchesStatus && _matchesSearch(data);
                   }).toList();
-
                   visible.sort((a, b) {
                     final comparison = _createdTime(
                       b.data(),
                     ).compareTo(_createdTime(a.data()));
-
                     return comparison == 0 ? a.id.compareTo(b.id) : comparison;
                   });
-
                   if (visible.isEmpty) {
                     return const Center(
                       child: Padding(
@@ -401,7 +402,6 @@ class _AdminProductQueryScreenState extends State<AdminProductQueryScreen> {
                       ),
                     );
                   }
-
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -421,14 +421,13 @@ class _AdminProductQueryScreenState extends State<AdminProductQueryScreen> {
                           itemCount: visible.length,
                           findChildIndexCallback: (key) {
                             if (key is! ValueKey<String>) return null;
-
                             final index = visible.indexWhere(
                               (doc) => doc.id == key.value,
                             );
-
                             return index < 0 ? null : index;
                           },
-                          itemBuilder: (_, index) => _card(visible[index]),
+                          itemBuilder: (context, index) =>
+                              _card(visible[index]),
                         ),
                       ),
                     ],
@@ -451,13 +450,11 @@ class _AdminProductQueryScreenState extends State<AdminProductQueryScreen> {
     final image = _text(q['imageUrl']);
     final buyerName = _text(q['buyerName']);
     final buyerEmail = _text(q['buyerEmail']);
-
     final activityStream = _activityStreams.putIfAbsent(
       id,
       () =>
           doc.reference.collection('activity').orderBy('createdAt').snapshots(),
     );
-
     return Container(
       key: ValueKey<String>(id),
       margin: const EdgeInsets.only(bottom: 16),
@@ -530,16 +527,45 @@ class _AdminProductQueryScreenState extends State<AdminProductQueryScreen> {
             if (image.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 8, bottom: 10),
-                child: ClipRRect(
+                child: Material(
                   borderRadius: BorderRadius.circular(8),
-                  child: Image.network(
-                    image,
-                    height: 150,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const SizedBox(
-                      height: 50,
-                      child: Center(child: Text('Image could not be loaded.')),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    onTap: () => _showImageViewer(image),
+                    child: Stack(
+                      children: [
+                        Image.network(
+                          image,
+                          height: 150,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) =>
+                              const SizedBox(
+                                height: 50,
+                                child: Center(
+                                  child: Text('Image could not be loaded.'),
+                                ),
+                              ),
+                        ),
+                        const Positioned(
+                          right: 8,
+                          bottom: 8,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: Colors.black54,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Padding(
+                              padding: EdgeInsets.all(7),
+                              child: Icon(
+                                Icons.fullscreen,
+                                color: Colors.white,
+                                size: 20,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -556,23 +582,19 @@ class _AdminProductQueryScreenState extends State<AdminProductQueryScreen> {
                 if (snapshot.hasError) {
                   return const Text('Activity unavailable.');
                 }
-
                 if (!snapshot.hasData) {
                   return const LinearProgressIndicator();
                 }
-
                 if (snapshot.data!.docs.isEmpty) {
                   return const Text(
                     'No comments or status history yet.',
                     style: TextStyle(color: Colors.grey),
                   );
                 }
-
                 return Column(
                   children: snapshot.data!.docs.map((activity) {
                     final d = activity.data();
                     final isComment = d['type'] == 'comment';
-
                     return Container(
                       width: double.infinity,
                       margin: const EdgeInsets.only(bottom: 6),
@@ -662,7 +684,6 @@ class _AdminProductQueryScreenState extends State<AdminProductQueryScreen> {
 
   Widget _detail(String label, dynamic value) {
     final text = _text(value);
-
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
