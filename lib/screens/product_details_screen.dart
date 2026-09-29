@@ -16,6 +16,8 @@ import 'catalog_support.dart';
 
 import 'request_cooldown_service.dart';
 
+import 'app_analytics_service.dart';
+
 class ProductDetailsScreen extends StatefulWidget {
   final String? productId;
 
@@ -42,6 +44,12 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
 
     try {
       await EstimateService.addProduct(id);
+
+      AppAnalyticsService.logAddToCart(
+        productId: id,
+        productName: (_product['productName'] ?? '').toString(),
+        category: (_product['category'] ?? '').toString(),
+      );
 
       if (!mounted) return;
 
@@ -286,6 +294,22 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
 
   Map<String, dynamic> _product = {};
 
+  String? _trackedProductId;
+
+  void _trackProductView() {
+    if (!_canUseBuyerActions) return;
+
+    final productId = widget.productId?.trim() ?? '';
+    if (productId.isEmpty || _trackedProductId == productId) return;
+
+    _trackedProductId = productId;
+    AppAnalyticsService.logProductView(
+      productId: productId,
+      productName: (_product['productName'] ?? '').toString(),
+      category: (_product['category'] ?? '').toString(),
+    );
+  }
+
   late final Stream<QuerySnapshot<Map<String, dynamic>>>? _reviewsStream;
 
   List<QueryDocumentSnapshot<Map<String, dynamic>>> _reviews = [];
@@ -340,46 +364,67 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
 
     await showDialog<void>(
       context: context,
+
       barrierColor: Colors.black,
+
       builder: (dialogContext) => Dialog.fullscreen(
         backgroundColor: Colors.black,
+
         child: SafeArea(
           child: Stack(
             children: [
               Center(
                 child: InteractiveViewer(
                   minScale: 0.8,
+
                   maxScale: 4,
+
                   panEnabled: true,
+
                   child: Image.network(
                     imageUrl,
+
                     fit: BoxFit.contain,
+
                     errorBuilder: (context, error, stackTrace) => const Center(
                       child: Icon(
                         Icons.broken_image_outlined,
+
                         color: Colors.white70,
+
                         size: 56,
                       ),
                     ),
                   ),
                 ),
               ),
+
               Positioned(
                 top: 8,
+
                 right: 8,
+
                 child: IconButton(
                   tooltip: 'Close',
+
                   onPressed: () => Navigator.of(dialogContext).pop(),
+
                   icon: const Icon(Icons.close, color: Colors.white),
                 ),
               ),
+
               const Positioned(
                 bottom: 20,
+
                 left: 0,
+
                 right: 0,
+
                 child: Text(
                   'Pinch to zoom • Drag to move',
+
                   textAlign: TextAlign.center,
+
                   style: TextStyle(color: Colors.white70, fontSize: 12),
                 ),
               ),
@@ -418,6 +463,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
     super.initState();
 
     _watchUserRole();
+
+    AppAnalyticsService.logScreenView('product_details');
 
     _detailsStream = widget.productId == null || widget.productId!.isEmpty
         ? null
@@ -499,6 +546,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
         }
 
         _product = catalogProduct(snapshot.data!);
+
+        _trackProductView();
 
         return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: _reviewsStream,
