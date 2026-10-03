@@ -112,9 +112,10 @@ class _AdminProductsScreenState extends State<AdminProductsScreen>
     final id = item['id'].toString();
     if (!await _confirm(
       'Delete product?',
-      item['productName'].toString() + ' will be removed permanently.',
-    ))
+      '${item['productName']} will be removed permanently.',
+    )) {
       return;
+    }
     setState(() => _busy.add(id));
     try {
       await FirebaseFirestore.instance.collection('products').doc(id).delete();
@@ -184,7 +185,7 @@ class _AdminProductsScreenState extends State<AdminProductsScreen>
             context: pageContext,
             builder: (dialog) => AlertDialog(
               title: const Text('Delete category?'),
-              content: Text(name + ' will be removed.'),
+              content: Text('$name will be removed.'),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(dialog, false),
@@ -339,7 +340,7 @@ class _ProductCard extends StatelessWidget {
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         subtitle: Text(
-          item['category'].toString() + ' • ' + item['sellingPrice'].toString(),
+          '${item['category']} • ${item['sellingPrice']}',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
@@ -418,18 +419,21 @@ class _CategoryManager extends StatelessWidget {
       child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: FirebaseFirestore.instance.collection('categories').snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.hasError)
+          if (snapshot.hasError) {
             return Center(child: Text(catalogError(snapshot.error!)));
-          if (!snapshot.hasData)
+          }
+          if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
+          }
           final docs = snapshot.data!.docs.toList()
             ..sort(
               (a, b) => (a.data()['name'] ?? '').toString().compareTo(
                 (b.data()['name'] ?? '').toString(),
               ),
             );
-          if (docs.isEmpty)
+          if (docs.isEmpty) {
             return const Center(child: Text('No categories yet.'));
+          }
           return ListView.separated(
             itemCount: docs.length,
             separatorBuilder: (_, __) => const SizedBox(height: 8),
@@ -511,11 +515,12 @@ class _CategoryEditorState extends State<_CategoryEditor> {
     );
     if (file == null) return;
     final bytes = await file.readAsBytes();
-    if (mounted)
+    if (mounted) {
       setState(() {
         _image = file;
         _bytes = bytes;
       });
+    }
   }
 
   String _id(String name) {
@@ -525,13 +530,14 @@ class _CategoryEditorState extends State<_CategoryEditor> {
         .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
         .replaceAll(RegExp(r'^-+|-+$'), '');
     return id.isEmpty
-        ? 'category-' + DateTime.now().millisecondsSinceEpoch.toString()
+        ? 'category-${DateTime.now().millisecondsSinceEpoch}'
         : id;
   }
 
   void _notice(String text) {
-    if (mounted)
+    if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+    }
   }
 
   Future<void> _save() async {
@@ -787,7 +793,7 @@ class _ProductEditorState extends State<_ProductEditor> {
     );
     if (image == null) return;
     final bytes = await image.readAsBytes();
-    if (mounted)
+    if (mounted) {
       setState(() {
         if (front) {
           _front = image;
@@ -797,11 +803,13 @@ class _ProductEditorState extends State<_ProductEditor> {
           _backBytes = bytes;
         }
       });
+    }
   }
 
   void _notice(String text) {
-    if (mounted)
+    if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+    }
   }
 
   Future<void> _save() async {
@@ -874,9 +882,7 @@ class _ProductEditorState extends State<_ProductEditor> {
             'category': _category,
             'sellerId': sellerDoc.id,
             'sellerName':
-                (seller['firstName'] ?? '').toString() +
-                ' ' +
-                (seller['lastName'] ?? '').toString(),
+                '${seller['firstName'] ?? ''} ${seller['lastName'] ?? ''}',
             'sellerShopName': _text(seller['shopName']),
             'sellerShopAddress': _text(seller['shopAddress']),
             'sellerSellingPrice': base,
@@ -914,16 +920,18 @@ class _ProductEditorState extends State<_ProductEditor> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading)
+    if (_loading) {
       return const _Sheet(
         title: 'Edit Product',
         child: Center(child: CircularProgressIndicator()),
       );
-    if (_original == null)
+    }
+    if (_original == null) {
       return const _Sheet(
         title: 'Edit Product',
         child: Center(child: Text('Product data could not be loaded.')),
       );
+    }
     return _Sheet(
       title: 'Edit Product',
       saving: _saving,
@@ -961,7 +969,9 @@ class _ProductEditorState extends State<_ProductEditor> {
             _field(_name, 'Product name', required: true),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: widget.categories.contains(_category) ? _category : null,
+              initialValue: widget.categories.contains(_category)
+                  ? _category
+                  : null,
               isExpanded: true,
               decoration: _input('Category'),
               items: widget.categories
@@ -1051,7 +1061,7 @@ class _ProductEditorState extends State<_ProductEditor> {
             ),
             const SizedBox(height: 20),
             DropdownButtonFormField<String>(
-              value: _status,
+              initialValue: _status,
               decoration: _input('Product status'),
               items: const [
                 DropdownMenuItem(value: 'Approved', child: Text('Approved')),
@@ -1146,19 +1156,16 @@ class _SellerField extends StatelessWidget {
             .toList();
         final selected = sellers.any((doc) => doc.id == value) ? value : null;
         return DropdownButtonFormField<String>(
-          value: selected,
+          initialValue: selected,
           isExpanded: true,
           decoration: _input('Assign seller'),
           items: sellers.map((doc) {
             final d = doc.data();
             final shop = (d['shopName'] ?? '').toString();
-            final name =
-                (d['firstName'] ?? '').toString() +
-                ' ' +
-                (d['lastName'] ?? '').toString();
+            final name = '${d['firstName'] ?? ''} ${d['lastName'] ?? ''}';
             return DropdownMenuItem(
               value: doc.id,
-              child: Text(shop + ' — ' + name, overflow: TextOverflow.ellipsis),
+              child: Text('$shop — $name', overflow: TextOverflow.ellipsis),
             );
           }).toList(),
           onChanged: enabled ? onChanged : null,

@@ -31,6 +31,10 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
     with TickerProviderStateMixin, CatalogState<ProductDetailsScreen> {
   int _selectedImageIndex = 0;
 
+  final PageController _imagePageController = PageController();
+
+  Timer? _imageSliderTimer;
+
   bool _addingToCart = false;
 
   Future<void> _addToCart() async {
@@ -47,7 +51,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
 
       AppAnalyticsService.logAddToCart(
         productId: id,
+
         productName: (_product['productName'] ?? '').toString(),
+
         category: (_product['category'] ?? '').toString(),
       );
 
@@ -300,12 +306,16 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
     if (!_canUseBuyerActions) return;
 
     final productId = widget.productId?.trim() ?? '';
+
     if (productId.isEmpty || _trackedProductId == productId) return;
 
     _trackedProductId = productId;
+
     AppAnalyticsService.logProductView(
       productId: productId,
+
       productName: (_product['productName'] ?? '').toString(),
+
       category: (_product['category'] ?? '').toString(),
     );
   }
@@ -353,86 +363,140 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
 
   String get _moq => _product['minOrderQuantity'] ?? '';
 
-  List<String> get _images => [
-    'frontImage',
+  List<String> get _images => ['frontImage', 'backImage']
+      .map((k) => (_product[k] ?? '').toString().trim())
+      .where((url) => url.isNotEmpty)
+      .toList();
 
-    'backImage',
-  ].map((k) => (_product[k] ?? '').toString()).toList();
+  void _startProductImageAutoSlider() {
+    _imageSliderTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
+      if (!mounted ||
+          !(ModalRoute.of(context)?.isCurrent ?? false) ||
+          !_imagePageController.hasClients ||
+          _images.length < 2) {
+        return;
+      }
 
-  Future<void> _showImageViewer(String imageUrl) async {
-    if (imageUrl.trim().isEmpty) return;
+      final nextIndex = (_selectedImageIndex + 1) % _images.length;
+      _imagePageController.animateToPage(
+        nextIndex,
+        duration: const Duration(milliseconds: 450),
+        curve: Curves.easeInOut,
+      );
+    });
+  }
 
-    await showDialog<void>(
-      context: context,
+  Future<void> _showExpandedImage() async {
+    final images = _images;
+    if (images.isEmpty) return;
 
-      barrierColor: Colors.black,
+    final initialIndex = _selectedImageIndex
+        .clamp(0, images.length - 1)
+        .toInt();
+    final expandedPageController = PageController(initialPage: initialIndex);
+    var currentIndex = initialIndex;
+    Timer? expandedSliderTimer;
 
-      builder: (dialogContext) => Dialog.fullscreen(
-        backgroundColor: Colors.black,
+    if (images.length > 1) {
+      expandedSliderTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
+        if (!expandedPageController.hasClients) return;
+        final nextIndex = (currentIndex + 1) % images.length;
+        expandedPageController.animateToPage(
+          nextIndex,
+          duration: const Duration(milliseconds: 450),
+          curve: Curves.easeInOut,
+        );
+      });
+    }
 
-        child: SafeArea(
-          child: Stack(
-            children: [
-              Center(
-                child: InteractiveViewer(
-                  minScale: 0.8,
-
-                  maxScale: 4,
-
-                  panEnabled: true,
-
-                  child: Image.network(
-                    imageUrl,
-
-                    fit: BoxFit.contain,
-
-                    errorBuilder: (context, error, stackTrace) => const Center(
-                      child: Icon(
-                        Icons.broken_image_outlined,
-
-                        color: Colors.white70,
-
-                        size: 56,
+    try {
+      await showDialog<void>(
+        context: context,
+        barrierColor: Colors.black,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setExpandedState) => Dialog.fullscreen(
+            backgroundColor: Colors.black,
+            child: SafeArea(
+              child: Stack(
+                children: [
+                  PageView.builder(
+                    controller: expandedPageController,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: images.length,
+                    onPageChanged: (index) {
+                      setExpandedState(() => currentIndex = index);
+                    },
+                    itemBuilder: (context, index) => Center(
+                      child: Image.network(
+                        images[index],
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) =>
+                            const Icon(
+                              Icons.broken_image_outlined,
+                              color: Colors.white70,
+                              size: 56,
+                            ),
                       ),
                     ),
                   ),
-                ),
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: IconButton(
+                      tooltip: 'Close',
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      icon: const Icon(Icons.close, color: Colors.white),
+                    ),
+                  ),
+                  if (images.length > 1)
+                    Positioned(
+                      bottom: 24,
+                      left: 0,
+                      right: 0,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Photo ${currentIndex + 1} of ${images.length}',
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: List.generate(
+                              images.length,
+                              (index) => AnimatedContainer(
+                                duration: const Duration(milliseconds: 180),
+                                width: currentIndex == index ? 16 : 6,
+                                height: 6,
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: currentIndex == index
+                                      ? Colors.white
+                                      : Colors.white54,
+                                  borderRadius: BorderRadius.circular(99),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
               ),
-
-              Positioned(
-                top: 8,
-
-                right: 8,
-
-                child: IconButton(
-                  tooltip: 'Close',
-
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-
-                  icon: const Icon(Icons.close, color: Colors.white),
-                ),
-              ),
-
-              const Positioned(
-                bottom: 20,
-
-                left: 0,
-
-                right: 0,
-
-                child: Text(
-                  'Pinch to zoom • Drag to move',
-
-                  textAlign: TextAlign.center,
-
-                  style: TextStyle(color: Colors.white70, fontSize: 12),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
-      ),
-    );
+      );
+    } finally {
+      expandedSliderTimer?.cancel();
+      expandedPageController.dispose();
+    }
   }
 
   List<Map<String, dynamic>> get _moreProducts => catalogProducts
@@ -496,6 +560,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
 
       duration: Duration(seconds: 18),
     )..repeat();
+
+    _startProductImageAutoSlider();
   }
 
   @override
@@ -507,6 +573,10 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
     _blinkingController?.dispose();
 
     _moreProductsController?.dispose();
+
+    _imageSliderTimer?.cancel();
+
+    _imagePageController.dispose();
 
     super.dispose();
   }
@@ -740,6 +810,12 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
   }
 
   Widget _buildDetails(BuildContext context) {
+    final images = _images;
+    final displayImages = images.isEmpty ? const [''] : images;
+    final selectedIndex = _selectedImageIndex
+        .clamp(0, displayImages.length - 1)
+        .toInt();
+
     final Widget minOrderBadge = ShopMinimumBadge(
       sellerId: _product['sellerId'],
     );
@@ -777,117 +853,79 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
                         crossAxisAlignment: CrossAxisAlignment.start,
 
                         children: [
-                          // Main Image Container
+                          // Product photos slide automatically every three seconds.
                           Container(
                             height: 200,
-
                             width: double.infinity,
-
                             clipBehavior: Clip.antiAlias,
-
                             decoration: BoxDecoration(
-                              color: Color(0xFFF7F8FA),
-
+                              color: const Color(0xFFF7F8FA),
                               borderRadius: BorderRadius.circular(12),
                             ),
-
-                            child: Material(
-                              color: Colors.transparent,
-
-                              child: InkWell(
-                                onTap: () => _showImageViewer(
-                                  _images[_selectedImageIndex],
-                                ),
-
-                                child: Stack(
-                                  fit: StackFit.expand,
-
-                                  children: [
-                                    catalogImage(
-                                      _images[_selectedImageIndex],
-
-                                      height: 200,
-                                    ),
-
-                                    const Positioned(
-                                      right: 10,
-
-                                      bottom: 10,
-
-                                      child: DecoratedBox(
-                                        decoration: BoxDecoration(
-                                          color: Colors.black54,
-
-                                          shape: BoxShape.circle,
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                GestureDetector(
+                                  onTap: images.isEmpty
+                                      ? null
+                                      : _showExpandedImage,
+                                  child: PageView.builder(
+                                    controller: _imagePageController,
+                                    physics:
+                                        const NeverScrollableScrollPhysics(),
+                                    itemCount: displayImages.length,
+                                    onPageChanged: (index) {
+                                      if (mounted) {
+                                        setState(
+                                          () => _selectedImageIndex = index,
+                                        );
+                                      }
+                                    },
+                                    itemBuilder: (context, index) =>
+                                        catalogImage(
+                                          displayImages[index],
+                                          height: 200,
                                         ),
-
-                                        child: Padding(
-                                          padding: EdgeInsets.all(7),
-
-                                          child: Icon(
-                                            Icons.zoom_in,
-
-                                            color: Colors.white,
-
-                                            size: 20,
+                                  ),
+                                ),
+                                if (images.length > 1)
+                                  Positioned(
+                                    left: 0,
+                                    right: 0,
+                                    bottom: 10,
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: List.generate(
+                                        images.length,
+                                        (index) => AnimatedContainer(
+                                          duration: const Duration(
+                                            milliseconds: 180,
+                                          ),
+                                          width: selectedIndex == index
+                                              ? 16
+                                              : 6,
+                                          height: 6,
+                                          margin: const EdgeInsets.symmetric(
+                                            horizontal: 3,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: selectedIndex == index
+                                                ? const Color(0xFF0052FF)
+                                                : Colors.white70,
+                                            borderRadius: BorderRadius.circular(
+                                              99,
+                                            ),
                                           ),
                                         ),
                                       ),
                                     ),
-                                  ],
-                                ),
-                              ),
+                                  ),
+                              ],
                             ),
                           ),
 
-                          SizedBox(height: 12),
-
-                          // Thumbnails
-                          Row(
-                            children: List.generate(_images.length, (index) {
-                              final isSelected = _selectedImageIndex == index;
-
-                              return GestureDetector(
-                                onTap: () {
-                                  setState(() {
-                                    _selectedImageIndex = index;
-                                  });
-                                },
-
-                                child: Container(
-                                  width: 42,
-
-                                  height: 42,
-
-                                  margin: EdgeInsets.only(right: 8),
-
-                                  decoration: BoxDecoration(
-                                    color: Color(0xFFF7F8FA),
-
-                                    borderRadius: BorderRadius.circular(8),
-
-                                    border: Border.all(
-                                      color: isSelected
-                                          ? Color(0xFF0052FF)
-                                          : Colors.grey.shade300,
-
-                                      width: isSelected ? 2 : 1,
-                                    ),
-                                  ),
-
-                                  child: catalogImage(
-                                    _images[index],
-
-                                    width: 42,
-
-                                    height: 42,
-                                  ),
-                                ),
-                              );
-                            }),
-                          ),
-
-                          SizedBox(height: 16),
+                          const SizedBox(height: 16),
 
                           // Product Title
                           Text(

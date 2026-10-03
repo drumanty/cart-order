@@ -1050,7 +1050,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
             final email = text.trim().toLowerCase();
             if (!email.endsWith('@gmail.com') ||
                 email.length <= '@gmail.com'.length) {
-              return 'Enter an email such as name\@gmail.com';
+              return 'Enter an email such as name@gmail.com';
             }
           }
           if (controller == _passwordController && text.length < 6) {

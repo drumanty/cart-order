@@ -40,7 +40,7 @@ flutter:
     - assets/tracon_slider.png
     - assets/electric.png
     - assets/agarbatti.png
-    - assets/product_image.png
+    
 
 flutter_launcher_icons:
   android: "launcher_icon"

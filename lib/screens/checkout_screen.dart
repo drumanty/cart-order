@@ -158,7 +158,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   Widget _sellerSummary(List<Map<String, dynamic>> sellerItems) {
     final shopName = sellerItems.first['shopName'] as String;
     final subtotal = EstimateService.total(sellerItems);
-    final minimum = sellerItems.first['minimumPaise'] as int;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -214,10 +213,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           ),
           const Divider(height: 20),
           _summaryRow('Seller subtotal', EstimateService.money(subtotal)),
-          if (minimum > 0) ...[
-            const SizedBox(height: 6),
-            _summaryRow('Minimum purchase', EstimateService.money(minimum)),
-          ],
         ],
       ),
     );
