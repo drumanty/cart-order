@@ -22,7 +22,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _shopNameController = TextEditingController();
-  final _gstPanController = TextEditingController();
+
   final _shopAddressController = TextEditingController();
   final _cityController = TextEditingController();
   final _stateController = TextEditingController();
@@ -45,7 +45,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     _shopNameController.dispose();
-    _gstPanController.dispose();
+
     _shopAddressController.dispose();
     _cityController.dispose();
     _stateController.dispose();
@@ -147,7 +147,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
               'userType': _userType,
               'shopName': _shopNameController.text.trim(),
               'businessCategory': _businessCategory!.trim(),
-              'gstPanNumber': _gstPanController.text.trim(),
+
               'shopAddress': _shopAddressController.text.trim(),
               'city': _cityController.text.trim(),
               'state': _stateController.text.trim(),
@@ -596,12 +596,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       ),
                       const SizedBox(height: 14),
                       _buildBusinessCategoryDropdown(),
-                      const SizedBox(height: 14),
-                      _buildInputField(
-                        controller: _gstPanController,
-                        hintText: 'GSTIN / PAN Card',
-                        icon: Icons.badge_outlined,
-                      ),
+
                       const SizedBox(height: 14),
                       _buildInputField(
                         controller: _shopAddressController,

@@ -131,7 +131,7 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
                 final mobile = (userData['mobileNumber'] ?? '').toString();
                 final userType = (userData['userType'] ?? 'User').toString();
                 final shopName = (userData['shopName'] ?? '').toString();
-                final gstPan = (userData['gstPanNumber'] ?? '').toString();
+
                 final shopAddress = (userData['shopAddress'] ?? '').toString();
                 final fullName = '$firstName $lastName'.trim();
                 final initial = firstName.isNotEmpty
@@ -234,11 +234,7 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
                         label: 'Shop Name',
                         value: shopName,
                       ),
-                      _buildDetailTile(
-                        icon: Icons.badge_outlined,
-                        label: 'GSTIN / PAN Card',
-                        value: gstPan,
-                      ),
+
                       _buildDetailTile(
                         icon: Icons.location_on_outlined,
                         label: 'Shop Address',

@@ -49,7 +49,7 @@ class _AdminBuyersScreenState extends State<AdminBuyersScreen> {
                   'lastName': field('lastName'),
                   'shopName': field('shopName'),
                   'businessCategory': field('businessCategory'),
-                  'gstinOrPan': field('gstPanNumber'),
+
                   'shopAddress': field('shopAddress'),
                   'city': field('city'),
                   'state': field('state'),
@@ -404,11 +404,7 @@ class _AdminBuyersScreenState extends State<AdminBuyersScreen> {
                                       label: 'Shop / Firm Name',
                                       value: buyer['shopName'],
                                     ),
-                                    _buildDetailRow(
-                                      icon: Icons.badge_outlined,
-                                      label: 'GSTIN / PAN',
-                                      value: buyer['gstinOrPan'],
-                                    ),
+
                                     _buildDetailRow(
                                       icon: Icons.location_on_outlined,
                                       label: 'Shop Address',
