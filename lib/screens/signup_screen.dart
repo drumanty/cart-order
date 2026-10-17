@@ -275,44 +275,175 @@ class _SignUpScreenState extends State<SignUpScreen> {
                               ),
                               SizedBox(height: 14),
                               Text(
-                                '1. Account approval',
+                                '1. About CartAndOrder',
                                 style: TextStyle(fontWeight: FontWeight.bold),
                               ),
                               SizedBox(height: 4),
                               Text(
-                                'Buyer and Seller accounts are subject to admin approval. We may reject, suspend or deactivate an account if information is incomplete, inaccurate, misleading or used unlawfully.',
+                                'CartAndOrder (“App”, “Platform”, “we”, “us”, or “our”) is a B2B product catalogue platform operating in India. The Platform enables registered business users to view product information and prices made available by sellers or authorized administrators and to request or obtain product estimates.',
                                 style: TextStyle(height: 1.5),
                               ),
                               SizedBox(height: 14),
                               Text(
-                                '2. Product information and estimates',
+                                '2. Eligibility',
                                 style: TextStyle(fontWeight: FontWeight.bold),
                               ),
                               SizedBox(height: 4),
                               Text(
-                                'Product images, prices, stock, package quantities and descriptions may change. An enquiry, cart item or estimate request is not a confirmed purchase order until it is reviewed and confirmed by the relevant business.',
+                                'You must provide accurate information and have the legal capacity to enter into an agreement under applicable Indian law. If you register on behalf of a business, you confirm that you are authorized to provide information and act on behalf of that business.',
                                 style: TextStyle(height: 1.5),
                               ),
                               SizedBox(height: 14),
                               Text(
-                                '3. Responsible use',
+                                '3. Account Registration',
                                 style: TextStyle(fontWeight: FontWeight.bold),
                               ),
                               SizedBox(height: 4),
                               Text(
-                                'Do not misuse the app, submit false enquiries, attempt unauthorised access, upload illegal content or interfere with another user’s account. We may restrict access to protect the platform and its users.',
+                                'Certain features require registration. You may be required to provide your name, business/shop details, address, email, phone number,  photographs, and other information reasonably required to operate the Platform. You are responsible for ensuring that submitted information is accurate and current and for maintaining the confidentiality of your login credentials.',
                                 style: TextStyle(height: 1.5),
                               ),
                               SizedBox(height: 14),
                               Text(
-                                '4. Communication',
+                                '4. Business and Product Information',
                                 style: TextStyle(fontWeight: FontWeight.bold),
                               ),
                               SizedBox(height: 4),
                               Text(
-                                'You agree that the support team or a seller may contact you about your account, enquiry, sample request, estimate or product-related service using the contact details you provide.',
+                                'Product information may include names, descriptions, photographs, specifications, prices, and other information supplied by sellers or authorized administrators. Although reasonable efforts may be made to maintain accurate information, CartAndOrder does not guarantee that every product description, price, image, specification, stock status, or other information will always be complete, current, or error-free. Prices and availability may change without prior notice.',
                                 style: TextStyle(height: 1.5),
                               ),
+                              SizedBox(height: 14),
+                              Text(
+                                '5. Estimates and Enquiries',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'Any estimate generated or displayed through CartAndOrder is for informational and business-planning purposes unless expressly stated otherwise. An estimate does not automatically constitute a final purchase order, contract, invoice, or binding sale agreement. Final pricing, quantity, availability, delivery arrangements, taxes, and other commercial terms may be confirmed separately between the relevant parties.',
+                                style: TextStyle(height: 1.5),
+                              ),
+                              SizedBox(height: 14),
+                              Text(
+                                '6. No Payment Facility',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'At the current stage, CartAndOrder does not provide an integrated payment or subscription facility. If payment or other commercial transactions are arranged separately between buyers and sellers, the relevant parties are responsible for those transactions and their applicable terms.',
+                                style: TextStyle(height: 1.5),
+                              ),
+                              SizedBox(height: 14),
+                              Text(
+                                '7. User Responsibilities',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'You agree not to provide false, misleading, or fraudulent information; use another person account without authorization; upload unlawful or infringing content; attempt unauthorized access; interfere with Platform security or operation; or use the App for unlawful, fraudulent, or abusive activities.',
+                                style: TextStyle(height: 1.5),
+                              ),
+                              SizedBox(height: 14),
+                              Text(
+                                '8. User-Uploaded Content',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'Users may upload photographs or other information. You retain ownership of content that you legally own. By uploading content, you grant CartAndOrder a limited, non-exclusive permission to host, store, process, display, and use that content as reasonably necessary to provide and operate the Platform. You are responsible for ensuring uploaded content does not violate law or third-party rights.',
+                                style: TextStyle(height: 1.5),
+                              ),
+                              SizedBox(height: 14),
+                              Text(
+                                '9. Intellectual Property',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'The CartAndOrder name, branding, logos, software, interface, design, graphics, text, and other Platform materials may be protected by applicable intellectual property laws. Product names, trademarks, logos, photographs, and other materials supplied by sellers or third parties remain the property of their respective owners.',
+                                style: TextStyle(height: 1.5),
+                              ),
+                              SizedBox(height: 14),
+                              Text(
+                                '10. Third-Party Services',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'CartAndOrder uses third-party services including Google Firebase, Google Analytics, and Cloudinary to support Platform functionality, analytics, and media processing/storage. Such providers may process information in accordance with their applicable terms and privacy practices.',
+                                style: TextStyle(height: 1.5),
+                              ),
+                              SizedBox(height: 14),
+                              Text(
+                                '11. Availability',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'We may modify, suspend, restrict, or discontinue any part of the Platform temporarily or permanently. We do not guarantee that CartAndOrder will always be available, uninterrupted, secure, or error-free.',
+                                style: TextStyle(height: 1.5),
+                              ),
+                              SizedBox(height: 14),
+                              Text(
+                                '12. Account Suspension or Termination',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'We may suspend or terminate an account where we reasonably believe that the user has violated these Terms, engaged in fraudulent or unlawful activity, provided materially false information, or created a security, legal, or operational risk.',
+                                style: TextStyle(height: 1.5),
+                              ),
+                              SizedBox(height: 14),
+                              Text(
+                                '13. Disclaimer',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'CartAndOrder provides the Platform on an “as available” basis. To the extent permitted by applicable law, we do not guarantee the accuracy, completeness, reliability, suitability, or availability of all product or business information. CartAndOrder does not guarantee that a buyer and seller will complete a transaction or that a listed product will remain available at a displayed price.',
+                                style: TextStyle(height: 1.5),
+                              ),
+                              SizedBox(height: 14),
+                              Text(
+                                '14. Limitation of Liability',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'To the maximum extent permitted by applicable law, CartAndOrder and its operators shall not be responsible for indirect, incidental, consequential, or special losses arising from use of the Platform. Nothing in these Terms is intended to exclude or limit liability that cannot legally be excluded or limited under applicable Indian law.',
+                                style: TextStyle(height: 1.5),
+                              ),
+                              SizedBox(height: 14),
+                              Text(
+                                '15. Privacy',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'Your use of CartAndOrder is also governed by our Privacy Policy, which explains how we collect, use, store, and protect personal and business information.',
+                                style: TextStyle(height: 1.5),
+                              ),
+                              SizedBox(height: 14),
+                              Text(
+                                '16. Changes to These Terms',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'We may update these Terms from time to time. Updated Terms may be made available through the App or other appropriate means. Continued use after an update constitutes acceptance of the revised Terms, to the extent permitted by law.',
+                                style: TextStyle(height: 1.5),
+                              ),
+                              SizedBox(height: 14),
+                              Text(
+                                '17. Governing Law',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'These Terms shall be governed by and interpreted in accordance with the laws of India. Any dispute shall be subject to the jurisdiction of courts having appropriate jurisdiction in India, subject to applicable law.',
+                                style: TextStyle(height: 1.5),
+                              ),
+
                               SizedBox(height: 24),
                               Text(
                                 'Privacy Policy',
@@ -323,37 +454,137 @@ class _SignUpScreenState extends State<SignUpScreen> {
                               ),
                               SizedBox(height: 10),
                               Text(
-                                'We collect account details such as your name, business information, email address, mobile number, address and optional profile photo. We also keep operational data such as product searches, enquiries, cart activity, estimate requests and account approval status.',
+                                'Depending on how you use CartAndOrder, we may collect name, email address, phone number, login/account information, business or shop information, shop/business address, business details, photographs/images, and certain device and usage information.',
                                 style: TextStyle(height: 1.5),
                               ),
                               SizedBox(height: 14),
                               Text(
-                                '5. How we use your information',
+                                '1. Photographs and Images',
                                 style: TextStyle(fontWeight: FontWeight.bold),
                               ),
                               SizedBox(height: 4),
                               Text(
-                                'Your information is used to create and approve accounts, display business details where needed, process enquiries and requests, provide support, improve the app and help prevent abuse or fraud.',
+                                'CartAndOrder may allow you to upload photographs or images using your devices gallery/photo-selection functionality. Images may be used for profile, business/shop, product-related, or other Platform features. CartAndOrder does not access your entire photo library simply because you use the App; images are selected and uploaded through the relevant functionality and Android permissions.',
                                 style: TextStyle(height: 1.5),
                               ),
                               SizedBox(height: 14),
                               Text(
-                                '6. Sharing and security',
+                                '2. Device and Usage Information',
                                 style: TextStyle(fontWeight: FontWeight.bold),
                               ),
                               SizedBox(height: 4),
                               Text(
-                                'We share only the information needed to handle a business request, for example buyer contact details with the responsible support team or seller. We use technical safeguards, but no online service can guarantee absolute security.',
+                                'We and our service providers may collect technical and usage information such as device type, operating system information, app version, approximate usage information, diagnostics, app interactions/events, crash information, and performance information. The exact information may depend on device settings and the third-party services enabled in the App.',
                                 style: TextStyle(height: 1.5),
                               ),
                               SizedBox(height: 14),
                               Text(
-                                '7. Your choices',
+                                '3. How We Use Information',
                                 style: TextStyle(fontWeight: FontWeight.bold),
                               ),
                               SizedBox(height: 4),
                               Text(
-                                'You may request correction of inaccurate account information or ask questions about your data by contacting the app administrator. Some information may need to be retained where required for legitimate business, security or legal reasons.',
+                                'We may use information to create and manage accounts, authenticate users, provide Platform features, display business and product information, generate estimates, verify business information, manage uploads, communicate with users, provide support, improve the App, analyze performance, prevent fraud or abuse, and comply with applicable legal obligations.',
+                                style: TextStyle(height: 1.5),
+                              ),
+                              SizedBox(height: 14),
+                              Text(
+                                '4. Third-Party Services',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'CartAndOrder uses Google Firebase for application infrastructure and related functions; Google Analytics to understand application usage, events, and performance; and Cloudinary for image/media storage, processing, and delivery. These providers may process information according to their applicable privacy policies and contractual arrangements with us.',
+                                style: TextStyle(height: 1.5),
+                              ),
+                              SizedBox(height: 14),
+                              Text(
+                                '5. Sharing of Information',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'We do not sell your personal information as a standalone product. We may share information when reasonably necessary to operate the Platform, with service providers processing information on our behalf, with authorized users where required for Platform functionality, to comply with law or legal processes, to protect rights and security, or in connection with a business transfer, subject to applicable law.',
+                                style: TextStyle(height: 1.5),
+                              ),
+                              SizedBox(height: 14),
+                              Text(
+                                '6. Business Information Visibility',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'Because CartAndOrder is a B2B catalogue platform, certain business information may be displayed to other authorized users or relevant Platform participants where necessary for the service. Users should avoid uploading sensitive personal information that is not required for the intended functionality.',
+                                style: TextStyle(height: 1.5),
+                              ),
+                              SizedBox(height: 14),
+                              Text(
+                                '7. Data Retention',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'We retain information for as long as reasonably necessary to provide the Platform, maintain business/account records, meet legal, tax, accounting, security, or regulatory requirements, resolve disputes, prevent fraud and abuse, and enforce agreements. When information is no longer reasonably required, it may be deleted, anonymized, or otherwise disposed of in accordance with applicable law and operational requirements.',
+                                style: TextStyle(height: 1.5),
+                              ),
+                              SizedBox(height: 14),
+                              Text(
+                                '8. Account and Data Deletion',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'You may request deletion of your CartAndOrder account and associated personal information by contacting us at [Official Support Email]. We may need to verify account ownership. Certain information may be retained where required by law or for legitimate legal, fraud-prevention, dispute-resolution, or record-keeping purposes.',
+                                style: TextStyle(height: 1.5),
+                              ),
+                              SizedBox(height: 14),
+                              Text(
+                                '9. Data Security',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'We take reasonable technical and organizational measures designed to protect information against unauthorized access, alteration, disclosure, loss, or misuse. However, no internet-based application or electronic storage system can be guaranteed to be completely secure.',
+                                style: TextStyle(height: 1.5),
+                              ),
+                              SizedBox(height: 14),
+                              Text(
+                                '10. Childrens Privacy',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'CartAndOrder is intended primarily for business and B2B users. The App is not intended to knowingly collect personal information from children for purposes unrelated to providing the service.',
+                                style: TextStyle(height: 1.5),
+                              ),
+                              SizedBox(height: 14),
+                              Text(
+                                '11. International Processing',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'Although CartAndOrder operates in India, third-party providers may process or store information using infrastructure located in India or other countries, depending on the services and infrastructure used. Where applicable, such processing will be subject to appropriate contractual, technical, and legal safeguards.',
+                                style: TextStyle(height: 1.5),
+                              ),
+                              SizedBox(height: 14),
+                              Text(
+                                '12. Your Rights',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'Subject to applicable law, you may have rights to request access to certain information, correction of inaccurate information, deletion where legally applicable, withdrawal of consent where processing is based on consent, and to raise a privacy-related complaint or grievance.',
+                                style: TextStyle(height: 1.5),
+                              ),
+                              SizedBox(height: 14),
+                              Text(
+                                '13. Changes to This Privacy Policy',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'We may update this Privacy Policy when our services, technology, legal requirements, or data practices change. The updated version will be made available through the App or other appropriate channels. The “Last Updated” date indicates when it was most recently revised.',
                                 style: TextStyle(height: 1.5),
                               ),
                               SizedBox(height: 14),
