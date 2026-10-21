@@ -121,7 +121,7 @@ class _SplashScreenState extends State<SplashScreen>
                                   child: Column(
                                     children: [
                                       Text(
-                                        'Cart & Order',
+                                        'Cart And Order',
                                         textAlign: TextAlign.center,
                                         style: TextStyle(
                                           color: Colors.white,

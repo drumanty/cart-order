@@ -1,4 +1,4 @@
-name: cartorder
+name: cartandorder
 description: "A new Flutter project."
 publish_to: 'none'
 
@@ -23,11 +23,14 @@ dependencies:
   http: ^1.2.2
   firebase_analytics: ^12.6.0
 
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_launcher_icons: ^0.13.1
+  flutter_native_splash: ^2.4.6
   flutter_lints: ^5.0.0
+
 
 flutter:
   uses-material-design: true
@@ -42,8 +45,20 @@ flutter:
     - assets/agarbatti.png
     
 
+
 flutter_launcher_icons:
-  android: "launcher_icon"
+  android: true
   ios: true
   image_path: "assets/logo.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/logo.png"
   remove_alpha_ios: true
+
+flutter_native_splash:
+  color: "#083BD6"
+  android: true
+  ios: true
+  android_12:
+    color: "#083BD6"
+
