@@ -90,8 +90,6 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
   }
 
   final List<String> _banners = const [
-    'assets/banner_one.png',
-
     'assets/agarbatti.png',
 
     'assets/electric.png',
@@ -326,26 +324,21 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
                   children: [
                     CircleAvatar(
                       radius: 22,
-
                       backgroundColor: const Color(0xFF0052FF),
-
-                      child: _buyerInitials.isEmpty
-                          ? const Icon(
+                      child: ClipOval(
+                        child: Image.asset(
+                          'assets/logo.png',
+                          width: 44,
+                          height: 44,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return const Icon(
                               Icons.person_outline,
-
                               color: Colors.white,
-                            )
-                          : Text(
-                              _buyerInitials,
-
-                              style: const TextStyle(
-                                color: Colors.white,
-
-                                fontWeight: FontWeight.bold,
-
-                                fontSize: 16,
-                              ),
-                            ),
+                            );
+                          },
+                        ),
+                      ),
                     ),
 
                     const SizedBox(width: 12),
@@ -363,7 +356,7 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
                             overflow: TextOverflow.ellipsis,
 
                             style: const TextStyle(
-                              fontSize: 12,
+                              fontSize: 14,
 
                               fontWeight: FontWeight.bold,
 
@@ -372,12 +365,6 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
                           ),
 
                           const SizedBox(height: 2),
-
-                          const Text(
-                            'Welcome to Cart & Order',
-
-                            style: TextStyle(fontSize: 8, color: Colors.grey),
-                          ),
                         ],
                       ),
                     ),

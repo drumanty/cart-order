@@ -1,8 +1,6 @@
-import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import 'auth_navigation.dart';
 import 'cloudinary_upload_service.dart';
 import 'login_screen.dart';
@@ -34,8 +32,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
-  XFile? _profileImage;
-  Uint8List? _profileImageBytes;
+
   @override
   void dispose() {
     _firstNameController.dispose();
@@ -51,29 +48,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
     _stateController.dispose();
     _pincodeController.dispose();
     super.dispose();
-  }
-
-  Future<void> _pickImage() async {
-    try {
-      final image = await ImagePicker().pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 85,
-        maxWidth: 1000,
-      );
-      if (image == null) return;
-      final bytes = await image.readAsBytes();
-      if (!mounted) return;
-      setState(() {
-        _profileImage = image;
-        _profileImageBytes = bytes;
-      });
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not select the photo.')),
-        );
-      }
-    }
   }
 
   Future<void> _handleSignUp() async {
@@ -129,12 +103,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
         const GetOptions(source: Source.server),
       );
       if (!existingProfile.exists) {
-        final photoUrl = _profileImage == null
-            ? null
-            : await CloudinaryUploadService.uploadImage(
-                image: _profileImage!,
-                uploadPreset: CloudinaryUploadService.profilePreset,
-              );
         await FirebaseFirestore.instance.runTransaction((transaction) async {
           final latestProfile = await transaction.get(userRef);
           if (!latestProfile.exists) {
@@ -148,12 +116,16 @@ class _SignUpScreenState extends State<SignUpScreen> {
               'shopName': _shopNameController.text.trim(),
               'businessCategory': _businessCategory!.trim(),
 
+              'gstPanNumber': '',
+
               'shopAddress': _shopAddressController.text.trim(),
               'city': _cityController.text.trim(),
               'state': _stateController.text.trim(),
               'pincode': _pincodeController.text.trim(),
-              'photoUrl': photoUrl,
+
+              'photoUrl': null,
               'photoPath': null,
+
               'termsAccepted': true,
               'termsAcceptedAt': FieldValue.serverTimestamp(),
               'createdAt': FieldValue.serverTimestamp(),
@@ -711,46 +683,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 20),
-                      Center(
-                        child: GestureDetector(
-                          onTap: _pickImage,
-                          child: Stack(
-                            children: [
-                              CircleAvatar(
-                                radius: 42,
-                                backgroundColor: const Color(0xFFEBF2FF),
-                                backgroundImage: _profileImageBytes == null
-                                    ? null
-                                    : MemoryImage(_profileImageBytes!),
-                                child: _profileImageBytes == null
-                                    ? const Icon(
-                                        Icons.add_a_photo_outlined,
-                                        size: 32,
-                                        color: Color(0xFF0052FF),
-                                      )
-                                    : null,
-                              ),
-                              Positioned(
-                                bottom: 0,
-                                right: 0,
-                                child: Container(
-                                  padding: const EdgeInsets.all(4),
-                                  decoration: const BoxDecoration(
-                                    color: Color(0xFF0052FF),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.edit,
-                                    size: 14,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+
                       const SizedBox(height: 20),
                       const Text(
                         'Select Account Type:',

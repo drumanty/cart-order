@@ -91,7 +91,6 @@ class _HomeScreenTwoState extends State<HomeScreenTwo>
   }
 
   final List<String> _banners = const [
-    'assets/banner_one.png',
     'assets/agarbatti.png',
     'assets/electric.png',
     'assets/tracon_slider.png',
