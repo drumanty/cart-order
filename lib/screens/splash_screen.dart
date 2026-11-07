@@ -1,6 +1,10 @@
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
 import 'login_screen.dart';
+import 'auth_navigation.dart';
 
 // The vector artwork follows the supplied square C/cart/O logo.
 // Keep that same square image (including its blue background) at this path.
@@ -17,41 +21,96 @@ class SplashScreen extends StatefulWidget {
 class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
+
   bool _started = false;
   bool _navigated = false;
 
   @override
   void initState() {
     super.initState();
+
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 4400),
+      duration: const Duration(milliseconds: 2200),
     )..addStatusListener(_onStatus);
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+
     if (_started) return;
     _started = true;
-    // Preload while the entrance plays; a vector fallback handles missing assets.
+
+    // Preload the logo while the entrance animation plays.
+    // The custom vector painter remains the fallback.
     precacheImage(const AssetImage(_logoAsset), context, onError: (_, __) {});
+
     if (MediaQuery.of(context).disableAnimations) {
       _controller.value = 0.85;
     }
+
     _controller.forward();
   }
 
+  // Called when the splash animation completes.
   void _onStatus(AnimationStatus status) {
-    if (status != AnimationStatus.completed || _navigated || !mounted) return;
+    if (status != AnimationStatus.completed || _navigated || !mounted) {
+      return;
+    }
+
     _navigated = true;
-    // Preserve your existing destination. No authentication logic is changed.
+    _checkLoginSession();
+  }
+
+  // Checks whether Firebase has restored an existing login session.
+  Future<void> _checkLoginSession() async {
+    try {
+      // Firebase automatically restores the saved authentication session.
+      final user = await FirebaseAuth.instance.authStateChanges().first;
+
+      if (!mounted) return;
+
+      // No authenticated user: open Login.
+      if (user == null) {
+        _openLogin();
+        return;
+      }
+
+      // Existing session: open the correct role dashboard.
+      //
+      // First checks the latest server profile.
+      // If the backend is temporarily unavailable, auth_navigation.dart
+      // attempts to use the cached profile.
+      await openRoleHome(context, allowCachedProfileOnNetworkError: true);
+    } on MissingUserProfile {
+      // The server confirmed that the user profile does not exist.
+      // Clear the incomplete authenticated session.
+      await FirebaseAuth.instance.signOut();
+
+      if (!mounted) return;
+
+      _openLogin();
+    } catch (error) {
+      if (!mounted) return;
+
+      // Do not automatically sign out on temporary network/backend errors.
+      // The Firebase authentication session remains saved.
+      _openLogin();
+    }
+  }
+
+  // Opens Login with the existing fade transition.
+  void _openLogin() {
+    if (!mounted) return;
+
     Navigator.of(context).pushReplacement(
       PageRouteBuilder<void>(
         pageBuilder: (_, __, ___) => const LoginScreen(),
         transitionDuration: const Duration(milliseconds: 500),
-        transitionsBuilder: (_, animation, __, child) =>
-            FadeTransition(opacity: animation, child: child),
+        transitionsBuilder: (_, animation, __, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
       ),
     );
   }
@@ -74,12 +133,14 @@ class _SplashScreenState extends State<SplashScreen>
               constraints.maxWidth,
               math.min(420.0, constraints.maxHeight * 0.63),
             );
+
             return AnimatedBuilder(
               animation: _controller,
               builder: (context, _) {
                 final t = _controller.value;
                 final reveal = _phase(t, 0.70, 0.83);
                 final title = _phase(t, 0.57, 0.76);
+
                 return Stack(
                   children: [
                     Center(
@@ -112,6 +173,7 @@ class _SplashScreenState extends State<SplashScreen>
                                 ),
                               ),
                             ),
+
                             Transform.translate(
                               offset: Offset(0, 16 * (1 - title)),
                               child: Opacity(
@@ -149,6 +211,7 @@ class _SplashScreenState extends State<SplashScreen>
                         ),
                       ),
                     ),
+
                     Positioned(
                       bottom: 24,
                       left: 0,
@@ -196,6 +259,7 @@ double _phase(double t, double start, double end) => Curves.easeInOutCubic
 
 class _LogoPainter extends CustomPainter {
   const _LogoPainter(this.t);
+
   final double t;
 
   @override
@@ -203,23 +267,30 @@ class _LogoPainter extends CustomPainter {
     // Coordinates trace the reference's 1254 x 1254 composition.
     canvas.save();
     canvas.scale(size.width / 1254, size.height / 1254);
+
     final c = _phase(t, 0.02, 0.30);
     final o = _phase(t, 0.09, 0.37);
+
     final cartT = ((t - 0.30) / 0.29).clamp(0.0, 1.0).toDouble();
+
     final cart = Curves.easeOutBack.transform(cartT);
     final cartOpacity = _phase(t, 0.30, 0.39);
 
-    // Right-hand O: the same bold, rounded ring, not a font character.
+    // Right-hand O: the same bold, rounded ring.
     canvas.save();
     canvas.translate(180 * (1 - o), -30 * (1 - o));
+
     final ring = Path()
       ..fillType = PathFillType.evenOdd
       ..addOval(const Rect.fromLTWH(590, 399, 449, 452))
       ..addOval(const Rect.fromLTWH(686, 494, 259, 260));
+
     canvas.drawPath(ring, Paint()..color = Colors.white.withOpacity(o));
+
     // A blue-to-white folded highlight where the cart joins the O.
     canvas.save();
     canvas.clipPath(ring);
+
     canvas.drawRect(
       const Rect.fromLTWH(590, 575, 220, 280),
       Paint()
@@ -231,12 +302,14 @@ class _LogoPainter extends CustomPainter {
           ],
         ).createShader(const Rect.fromLTWH(590, 575, 200, 280)),
     );
+
     canvas.restore();
     canvas.restore();
 
-    // Left-hand C, including the pointed lower terminal in the reference.
+    // Left-hand C, including the pointed lower terminal.
     canvas.save();
     canvas.translate(-180 * (1 - c), 25 * (1 - c));
+
     final cPath = Path()
       ..moveTo(598, 457)
       ..cubicTo(500, 361, 335, 392, 263, 479)
@@ -250,12 +323,15 @@ class _LogoPainter extends CustomPainter {
       ..lineTo(598, 470)
       ..quadraticBezierTo(606, 464, 598, 457)
       ..close();
+
     canvas.drawPath(cPath, Paint()..color = Colors.white.withOpacity(c));
+
     canvas.restore();
 
     // Cart comes from the left and gently overshoots before docking.
     canvas.save();
     canvas.translate(-640 * (1 - cart), -14 * math.sin(cartT * math.pi));
+
     final basket = Path()
       ..moveTo(340, 599)
       ..lineTo(386, 599)
@@ -275,6 +351,7 @@ class _LogoPainter extends CustomPainter {
       ..lineTo(336, 607)
       ..quadraticBezierTo(333, 599, 340, 599)
       ..close();
+
     final slots = Path()
       ..moveTo(424, 662)
       ..lineTo(557, 662)
@@ -290,17 +367,23 @@ class _LogoPainter extends CustomPainter {
       ..quadraticBezierTo(433, 721, 432, 715)
       ..quadraticBezierTo(428, 705, 438, 705)
       ..close();
+
     final paint = Paint()..color = Colors.white.withOpacity(cartOpacity);
+
     canvas.drawPath(
       Path.combine(PathOperation.difference, basket, slots),
       paint,
     );
+
     canvas.drawCircle(const Offset(439, 792), 27, paint);
+
     canvas.drawCircle(const Offset(544, 792), 27, paint);
+
     canvas.restore();
 
     // A restrained expanding halo marks the cart's arrival.
     final halo = _phase(t, 0.56, 0.70);
+
     if (halo > 0 && halo < 1) {
       canvas.drawOval(
         Rect.fromCenter(
@@ -314,9 +397,12 @@ class _LogoPainter extends CustomPainter {
           ..color = Colors.white.withOpacity(0.22 * (1 - halo)),
       );
     }
+
     canvas.restore();
   }
 
   @override
-  bool shouldRepaint(covariant _LogoPainter oldDelegate) => t != oldDelegate.t;
+  bool shouldRepaint(covariant _LogoPainter oldDelegate) {
+    return t != oldDelegate.t;
+  }
 }

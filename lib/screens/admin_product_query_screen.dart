@@ -507,7 +507,7 @@ class _AdminProductQueryScreenState extends State<AdminProductQueryScreen> {
                 const SizedBox(height: 5),
                 Text(
                   '${_money(q['minPrice'])} – ${_money(q['maxPrice'])}'
-                  '   •   Qty: ${q['quantity'] ?? 0} ${unitType}',
+                  '   •   Qty: ${q['quantity'] ?? 0} $unitType',
                 ),
               ],
             ),
@@ -521,7 +521,7 @@ class _AdminProductQueryScreenState extends State<AdminProductQueryScreen> {
             _detail('Product name', q['productName']),
             _detail('Minimum price', _money(q['minPrice'])),
             _detail('Maximum price', _money(q['maxPrice'])),
-            _detail('Required quantity', '${q['quantity'] ?? 0} ${unitType}'),
+            _detail('Required quantity', '${q['quantity'] ?? 0} $unitType'),
             _detail('Description', q['description']),
             _detail('Submitted', _date(q['createdAt'])),
             _detail('Last updated', _date(q['updatedAt'])),
