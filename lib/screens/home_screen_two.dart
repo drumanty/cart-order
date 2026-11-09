@@ -381,26 +381,21 @@ class _HomeScreenTwoState extends State<HomeScreenTwo>
                   children: [
                     CircleAvatar(
                       radius: 22,
-
                       backgroundColor: const Color(0xFF0052FF),
-
-                      child: _userInitials.isEmpty
-                          ? const Icon(
+                      child: ClipOval(
+                        child: Image.asset(
+                          'assets/logo.png',
+                          width: 44,
+                          height: 44,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return const Icon(
                               Icons.person_outline,
-
                               color: Colors.white,
-                            )
-                          : Text(
-                              _userInitials,
-
-                              style: const TextStyle(
-                                color: Colors.white,
-
-                                fontWeight: FontWeight.bold,
-
-                                fontSize: 16,
-                              ),
-                            ),
+                            );
+                          },
+                        ),
+                      ),
                     ),
 
                     const SizedBox(width: 12),
@@ -424,14 +419,6 @@ class _HomeScreenTwoState extends State<HomeScreenTwo>
 
                               color: Colors.black,
                             ),
-                          ),
-
-                          const SizedBox(height: 2),
-
-                          const Text(
-                            'Welcome to Cart & Order',
-
-                            style: TextStyle(fontSize: 11, color: Colors.grey),
                           ),
                         ],
                       ),

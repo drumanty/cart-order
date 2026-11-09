@@ -296,7 +296,19 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
 
   AnimationController? _blinkingController;
 
-  AnimationController? _moreProductsController;
+  // Scroll controller for the automatically moving, manually scrollable
+  // More Products list.
+  final ScrollController _moreProductsScrollController = ScrollController();
+
+  Timer? _moreProductsAutoScrollTimer;
+
+  bool _isMoreProductsManuallyScrolling = false;
+
+  bool _moreProductsPositionPending = false;
+
+  bool _moreProductsLoopJumpPending = false;
+
+  int _moreProductsConfiguredItemCount = -1;
 
   Map<String, dynamic> _product = {};
 
@@ -553,13 +565,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
       duration: Duration(milliseconds: 800),
     )..repeat(reverse: true);
 
-    // More Products continuous vertical animation
-
-    _moreProductsController = AnimationController(
-      vsync: this,
-
-      duration: Duration(seconds: 18),
-    )..repeat();
+    // More Products continues moving automatically, while still allowing
+    // the user to scroll it manually in either direction.
+    _startMoreProductsAutoScroll();
 
     _startProductImageAutoSlider();
   }
@@ -572,7 +580,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
 
     _blinkingController?.dispose();
 
-    _moreProductsController?.dispose();
+    _moreProductsAutoScrollTimer?.cancel();
+
+    _moreProductsScrollController.dispose();
 
     _imageSliderTimer?.cancel();
 
@@ -1433,10 +1443,133 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
 
   // ======================================================================
 
-  Widget _buildMoreProductsAnimation() {
-    double itemHeight = 52.0;
+  // Starts the automatic upward movement of the More Products list.
+  // One complete product cycle takes approximately 18 seconds, matching
+  // the speed of the previous animation.
+  void _startMoreProductsAutoScroll() {
+    _moreProductsAutoScrollTimer?.cancel();
 
-    double viewportHeight = 380.0;
+    _moreProductsAutoScrollTimer = Timer.periodic(
+      const Duration(milliseconds: 30),
+      (timer) {
+        if (!mounted ||
+            !(ModalRoute.of(context)?.isCurrent ?? false) ||
+            _isMoreProductsManuallyScrolling ||
+            !_moreProductsScrollController.hasClients) {
+          return;
+        }
+
+        final itemCount = _moreProducts.length;
+        if (itemCount == 0) return;
+
+        final position = _moreProductsScrollController.position;
+        if (!position.hasContentDimensions || position.maxScrollExtent <= 0) {
+          return;
+        }
+
+        final cycleHeight = itemCount * 52.0;
+        final step = cycleHeight / 600.0; // 18 seconds at 30 ms per tick.
+        final currentOffset = position.pixels;
+        final maxOffset = position.maxScrollExtent;
+
+        // Keep the list inside its repeated content. Moving by exactly one
+        // cycle keeps the visible products in the same positions.
+        if (currentOffset > maxOffset - cycleHeight) {
+          _moreProductsScrollController.jumpTo(
+            (currentOffset - cycleHeight).clamp(0.0, maxOffset).toDouble(),
+          );
+          return;
+        }
+
+        _moreProductsScrollController.jumpTo(
+          (currentOffset + step).clamp(0.0, maxOffset).toDouble(),
+        );
+      },
+    );
+  }
+
+  // Start in the middle of the repeated list so the user can immediately
+  // scroll either upward or downward.
+  void _scheduleMoreProductsInitialPosition(int itemCount) {
+    if (_moreProductsConfiguredItemCount == itemCount ||
+        _moreProductsPositionPending) {
+      return;
+    }
+
+    _moreProductsPositionPending = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _moreProductsPositionPending = false;
+
+      if (!mounted || !_moreProductsScrollController.hasClients) return;
+
+      final position = _moreProductsScrollController.position;
+
+      if (position.maxScrollExtent > 0) {
+        _moreProductsScrollController.jumpTo(position.maxScrollExtent / 2);
+      }
+
+      _moreProductsConfiguredItemCount = itemCount;
+    });
+  }
+
+  // Reposition by one identical product cycle near either end. This makes
+  // the list feel continuous even when the user manually scrolls a long way.
+  void _keepMoreProductsListLooping(ScrollMetrics metrics) {
+    if (_moreProductsLoopJumpPending) return;
+
+    final cycleHeight = _moreProducts.length * 52.0;
+    if (cycleHeight <= 0) return;
+
+    final pixels = metrics.pixels;
+    final maxOffset = metrics.maxScrollExtent;
+
+    if (pixels >= maxOffset - cycleHeight) {
+      _scheduleMoreProductsLoopJump(-cycleHeight);
+    } else if (pixels <= cycleHeight) {
+      _scheduleMoreProductsLoopJump(cycleHeight);
+    }
+  }
+
+  void _scheduleMoreProductsLoopJump(double adjustment) {
+    if (_moreProductsLoopJumpPending) return;
+
+    _moreProductsLoopJumpPending = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _moreProductsLoopJumpPending = false;
+
+      if (!mounted || !_moreProductsScrollController.hasClients) return;
+
+      final position = _moreProductsScrollController.position;
+      final target = (position.pixels + adjustment)
+          .clamp(0.0, position.maxScrollExtent)
+          .toDouble();
+
+      _moreProductsScrollController.jumpTo(target);
+    });
+  }
+
+  bool _onMoreProductsScrollNotification(ScrollNotification notification) {
+    if (notification is ScrollStartNotification &&
+        notification.dragDetails != null) {
+      _isMoreProductsManuallyScrolling = true;
+    }
+
+    if (notification is ScrollEndNotification) {
+      _isMoreProductsManuallyScrolling = false;
+    }
+
+    if (notification is ScrollUpdateNotification) {
+      _keepMoreProductsListLooping(notification.metrics);
+    }
+
+    return false;
+  }
+
+  Widget _buildMoreProductsAnimation() {
+    const double itemHeight = 52.0;
+    const double viewportHeight = 380.0;
 
     final int itemCount = _moreProducts.length;
 
@@ -1447,61 +1580,44 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
     if (itemCount == 0) {
       return SizedBox(
         height: viewportHeight,
-
         child: Center(child: Text('No other products from this seller.')),
       );
     }
 
+    _scheduleMoreProductsInitialPosition(itemCount);
+
+    // Repeat the products so scrolling can continue in either direction.
+    // ListView.builder creates only the visible rows, not the entire list.
     return SizedBox(
       height: viewportHeight,
-
       width: double.infinity,
-
       child: ClipRect(
-        child: AnimatedBuilder(
-          animation: _moreProductsController!,
+        child: NotificationListener<ScrollNotification>(
+          onNotification: _onMoreProductsScrollNotification,
+          child: ListView.builder(
+            controller: _moreProductsScrollController,
+            physics: const BouncingScrollPhysics(
+              parent: AlwaysScrollableScrollPhysics(),
+            ),
+            padding: EdgeInsets.zero,
+            itemExtent: itemHeight,
+            itemCount: itemCount * 20,
+            itemBuilder: (context, index) {
+              final product = _moreProducts[index % itemCount];
 
-          builder: (context, child) {
-            final double totalHeight = itemCount * itemHeight;
-
-            final double offset = _moreProductsController!.value * totalHeight;
-
-            return Stack(
-              clipBehavior: Clip.hardEdge,
-
-              children: List.generate(itemCount, (index) {
-                double y = (index * itemHeight - offset) % totalHeight;
-
-                if (y < 0) {
-                  y += totalHeight;
-                }
-
-                return Positioned(
-                  left: 0,
-
-                  right: 0,
-
-                  top: y,
-
-                  height: itemHeight,
-
-                  child: GestureDetector(
-                    onTap: () => Navigator.push(
-                      context,
-
-                      MaterialPageRoute(
-                        builder: (_) => ProductDetailsScreen(
-                          productId: _moreProducts[index]['id'],
-                        ),
-                      ),
-                    ),
-
-                    child: _buildMoreProductItem(_moreProducts[index]),
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        ProductDetailsScreen(productId: product['id']),
                   ),
-                );
-              }),
-            );
-          },
+                ),
+                child: _buildMoreProductItem(product),
+              );
+            },
+          ),
         ),
       ),
     );

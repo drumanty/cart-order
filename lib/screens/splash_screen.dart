@@ -12,7 +12,9 @@ const _logoAsset = 'assets/logo.png';
 const _brandBlue = Color(0xFF083BD6);
 
 class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key});
+  final bool resumeOverlay;
+
+  const SplashScreen({super.key, this.resumeOverlay = false});
 
   @override
   State<SplashScreen> createState() => _SplashScreenState();
@@ -60,6 +62,15 @@ class _SplashScreenState extends State<SplashScreen>
     }
 
     _navigated = true;
+
+    // When returning from background, close the splash
+    // and restore the previously opened screen.
+    if (widget.resumeOverlay) {
+      Navigator.of(context).pop();
+      return;
+    }
+
+    // Normal app launch: check Firebase login and user role.
     _checkLoginSession();
   }
 
