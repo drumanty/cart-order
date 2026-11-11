@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import 'admin_active_buyer_screen.dart';
+import 'admin_account_deletion_requests_screen.dart';
 import 'admin_active_seller_screen.dart';
 import 'admin_enquiry_screen.dart';
 import 'admin_estimate_order.dart';
@@ -406,6 +407,23 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       context,
                       MaterialPageRoute(
                         builder: (_) => AdminProductQueryScreen(),
+                      ),
+                    );
+                  },
+                ),
+                _buildRequestCard(
+                  title: 'Account Deletion',
+                  collection: 'account_deletion_requests',
+                  waitingStatus: 'pending',
+                  emptyLabel: 'No pending deletions',
+                  icon: Icons.person_remove_outlined,
+                  color: Colors.redAccent,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            const AdminAccountDeletionRequestsScreen(),
                       ),
                     );
                   },

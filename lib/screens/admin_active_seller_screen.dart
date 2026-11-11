@@ -40,6 +40,7 @@ class _AdminSellersScreenState extends State<AdminSellersScreen> {
                   'approved' => 'Approved',
                   'suspended' => 'Suspended',
                   'rejected' => 'Rejected',
+                  'deactivated' => 'Deactivated',
                   _ => 'Pending',
                 };
                 return <String, dynamic>{
@@ -99,6 +100,7 @@ class _AdminSellersScreenState extends State<AdminSellersScreen> {
     'Approved',
     'Suspended',
     'Rejected',
+    'Deactivated',
   ];
 
   List<Map<String, dynamic>> get _filteredSellers {
@@ -116,6 +118,16 @@ class _AdminSellersScreenState extends State<AdminSellersScreen> {
     Map<String, dynamic> seller,
     String newStatus,
   ) async {
+    if (seller['status'] == 'Deactivated') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'This account is deactivated for deletion and cannot be reactivated here.',
+          ),
+        ),
+      );
+      return;
+    }
     final uid = seller['id'] as String;
     if (_saving.contains(uid)) return;
     setState(() => _saving.add(uid));
@@ -147,6 +159,8 @@ class _AdminSellersScreenState extends State<AdminSellersScreen> {
         return Colors.orange;
       case 'Rejected':
         return Colors.red;
+      case 'Deactivated':
+        return Colors.blueGrey;
       case 'Pending':
       default:
         return const Color(0xFF0052FF);

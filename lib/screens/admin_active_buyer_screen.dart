@@ -40,6 +40,7 @@ class _AdminBuyersScreenState extends State<AdminBuyersScreen> {
                   'approved' => 'Approved',
                   'suspended' => 'Suspended',
                   'rejected' => 'Rejected',
+                  'deactivated' => 'Deactivated',
                   _ => 'Pending',
                 };
                 return <String, dynamic>{
@@ -98,6 +99,7 @@ class _AdminBuyersScreenState extends State<AdminBuyersScreen> {
     'Approved',
     'Suspended',
     'Rejected',
+    'Deactivated',
   ];
 
   // Filter buyers by both business category and account status.
@@ -116,6 +118,16 @@ class _AdminBuyersScreenState extends State<AdminBuyersScreen> {
     Map<String, dynamic> buyer,
     String newStatus,
   ) async {
+    if (buyer['status'] == 'Deactivated') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'This account is deactivated for deletion and cannot be reactivated here.',
+          ),
+        ),
+      );
+      return;
+    }
     final uid = buyer['id'] as String;
     if (_saving.contains(uid)) return;
     setState(() => _saving.add(uid));
@@ -147,6 +159,8 @@ class _AdminBuyersScreenState extends State<AdminBuyersScreen> {
         return Colors.orange;
       case 'Rejected':
         return Colors.red;
+      case 'Deactivated':
+        return Colors.blueGrey;
       case 'Pending':
       default:
         return const Color(0xFF0052FF);
