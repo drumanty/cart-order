@@ -85,6 +85,7 @@ Map<String, dynamic> catalogProduct(
     'sellerName',
     'sellerShopName',
     'sellerShopAddress',
+    'sellerState',
     'unitTypes',
     'description',
     'warranty',

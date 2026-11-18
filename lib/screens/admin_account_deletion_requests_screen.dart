@@ -13,8 +13,9 @@ class AdminAccountDeletionRequestsScreen extends StatefulWidget {
 class _AdminAccountDeletionRequestsScreenState
     extends State<AdminAccountDeletionRequestsScreen> {
   final Set<String> _processing = {};
-  final CollectionReference<Map<String, dynamic>> _requests =
-      FirebaseFirestore.instance.collection('account_deletion_requests');
+  final CollectionReference<Map<String, dynamic>> _requests = FirebaseFirestore
+      .instance
+      .collection('account_deletion_requests');
 
   Future<void> _reviewRequest({
     required String uid,
@@ -26,7 +27,9 @@ class _AdminAccountDeletionRequestsScreenState
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(approve ? 'Approve deletion request?' : 'Reject deletion request?'),
+        title: Text(
+          approve ? 'Approve deletion request?' : 'Reject deletion request?',
+        ),
         content: Text(
           approve
               ? 'This will deactivate the user profile and block normal app access. You must then complete the actual account/data deletion manually in Firebase Console, retaining only records you are legally required to keep.'
@@ -53,7 +56,9 @@ class _AdminAccountDeletionRequestsScreenState
     final admin = FirebaseAuth.instance.currentUser;
     if (admin == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Admin session not found. Please log in again.')),
+        const SnackBar(
+          content: Text('Admin session not found. Please log in again.'),
+        ),
       );
       return;
     }
@@ -80,9 +85,13 @@ class _AdminAccountDeletionRequestsScreenState
       await batch.commit();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(approve
-            ? 'Request approved. Account access is deactivated; complete data deletion next.'
-            : 'Request rejected. The account remains active.')),
+        SnackBar(
+          content: Text(
+            approve
+                ? 'Request approved. Account access is deactivated; complete data deletion next.'
+                : 'Request rejected. The account remains active.',
+          ),
+        ),
       );
     } on FirebaseException catch (error) {
       if (mounted) {
@@ -128,7 +137,9 @@ class _AdminAccountDeletionRequestsScreenState
             return const Center(
               child: Padding(
                 padding: EdgeInsets.all(24),
-                child: Text('Unable to load requests. Check Admin permissions and Firestore Rules.'),
+                child: Text(
+                  'Unable to load requests. Check Admin permissions and Firestore Rules.',
+                ),
               ),
             );
           }
@@ -163,8 +174,8 @@ class _AdminAccountDeletionRequestsScreenState
               final statusColor = pending
                   ? Colors.orange
                   : approved
-                      ? Colors.deepOrange
-                      : Colors.redAccent;
+                  ? Colors.deepOrange
+                  : Colors.redAccent;
 
               return Card(
                 margin: const EdgeInsets.only(bottom: 14),
@@ -180,30 +191,57 @@ class _AdminAccountDeletionRequestsScreenState
                     children: [
                       Row(
                         children: [
-                          const Icon(Icons.person_remove_outlined, color: Colors.redAccent),
+                          const Icon(
+                            Icons.person_remove_outlined,
+                            color: Colors.redAccent,
+                          ),
                           const SizedBox(width: 10),
                           Expanded(
-                            child: Text(email, style: const TextStyle(fontWeight: FontWeight.bold)),
+                            child: Text(
+                              email,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 9,
+                              vertical: 5,
+                            ),
                             decoration: BoxDecoration(
                               color: statusColor.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(20),
                             ),
-                            child: Text(status.replaceAll('_', ' ').toUpperCase(),
-                                style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold)),
+                            child: Text(
+                              status.replaceAll('_', ' ').toUpperCase(),
+                              style: TextStyle(
+                                color: statusColor,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 10),
                       Text('Account type: $userType'),
                       const SizedBox(height: 4),
-                      Text('Requested: ${_dateText(data['requestedAt'])}',
-                          style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                      Text(
+                        'Requested: ${_dateText(data['requestedAt'])}',
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 12,
+                        ),
+                      ),
                       const SizedBox(height: 4),
-                      Text('User ID: $uid',
-                          style: TextStyle(color: Colors.grey.shade600, fontSize: 11)),
+                      Text(
+                        'User ID: $uid',
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 11,
+                        ),
+                      ),
                       if (pending) ...[
                         const SizedBox(height: 14),
                         Row(
@@ -212,7 +250,10 @@ class _AdminAccountDeletionRequestsScreenState
                               child: OutlinedButton(
                                 onPressed: _processing.contains(uid)
                                     ? null
-                                    : () => _reviewRequest(uid: uid, approve: false),
+                                    : () => _reviewRequest(
+                                        uid: uid,
+                                        approve: false,
+                                      ),
                                 child: const Text('Reject'),
                               ),
                             ),
@@ -225,9 +266,18 @@ class _AdminAccountDeletionRequestsScreenState
                                 ),
                                 onPressed: _processing.contains(uid)
                                     ? null
-                                    : () => _reviewRequest(uid: uid, approve: true),
+                                    : () => _reviewRequest(
+                                        uid: uid,
+                                        approve: true,
+                                      ),
                                 child: _processing.contains(uid)
-                                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
                                     : const Text('Approve'),
                               ),
                             ),
@@ -237,12 +287,18 @@ class _AdminAccountDeletionRequestsScreenState
                         const SizedBox(height: 12),
                         const Text(
                           'Next required step: complete deletion of this user’s Firebase Authentication account and non-retained personal data. Do not treat deactivation as completed deletion.',
-                          style: TextStyle(color: Colors.deepOrange, fontSize: 12, height: 1.35),
+                          style: TextStyle(
+                            color: Colors.deepOrange,
+                            fontSize: 12,
+                            height: 1.35,
+                          ),
                         ),
                       ] else ...[
                         const SizedBox(height: 8),
-                        const Text('The account remains active. The user may submit a new request.',
-                            style: TextStyle(fontSize: 12, color: Colors.grey)),
+                        const Text(
+                          'The account remains active. The user may submit a new request.',
+                          style: TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
                       ],
                     ],
                   ),

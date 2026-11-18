@@ -91,9 +91,9 @@ class _HomeScreenTwoState extends State<HomeScreenTwo>
   }
 
   final List<String> _banners = const [
-    'assets/agarbatti.png',
-    'assets/electric.png',
-    'assets/tracon_slider.png',
+    'assets/01_electric.png',
+    'assets/02_tracon_slider.png',
+    'assets/03_agarbatti.png',
   ];
 
   @override
@@ -751,6 +751,12 @@ class _HomeScreenTwoState extends State<HomeScreenTwo>
 
                           title: _text(product['productName']),
 
+                          sellerShopName: _text(product['sellerShopName']),
+
+                          sellerShopAddress: _text(
+                            product['sellerShopAddress'],
+                          ),
+
                           price: _text(product['unitPrice']),
 
                           unit: _text(product['unitTypes']),
@@ -854,6 +860,10 @@ class _HomeScreenTwoState extends State<HomeScreenTwo>
 
     required String title,
 
+    required String sellerShopName,
+
+    required String sellerShopAddress,
+
     required String price,
 
     required String unit,
@@ -933,6 +943,45 @@ class _HomeScreenTwoState extends State<HomeScreenTwo>
                         ),
                       ],
                     ),
+
+                    if (sellerShopName.trim().isNotEmpty) ...[
+                      const SizedBox(height: 5),
+                      Text(
+                        sellerShopName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ],
+
+                    if (sellerShopAddress.trim().isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.location_on_outlined,
+                            size: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                          const SizedBox(width: 3),
+                          Expanded(
+                            child: Text(
+                              sellerShopAddress,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
 
                     const SizedBox(height: 6),
 

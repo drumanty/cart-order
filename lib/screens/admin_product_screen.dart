@@ -885,6 +885,8 @@ class _ProductEditorState extends State<_ProductEditor> {
                 '${seller['firstName'] ?? ''} ${seller['lastName'] ?? ''}',
             'sellerShopName': _text(seller['shopName']),
             'sellerShopAddress': _text(seller['shopAddress']),
+            // Copy the seller's state into the product for buyer-facing cards.
+            'sellerState': _text(seller['state']).trim(),
             'sellerSellingPrice': base,
             'marginPercent': margin,
             'actualSellingPrice': actual,

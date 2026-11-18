@@ -220,6 +220,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
             '${profile['firstName'] ?? ''} ${profile['lastName'] ?? ''}'.trim(),
         'sellerShopName': (profile['shopName'] ?? '').toString(),
         'sellerShopAddress': (profile['shopAddress'] ?? '').toString(),
+        // Copy the seller's state into the product for buyer-facing cards.
+        'sellerState': (profile['state'] ?? '').toString().trim(),
         // Seller base price + Admin margin + calculated buyer prices.
         'sellerSellingPrice': sellerPrice,
         'marginPercent': margin,

@@ -90,11 +90,10 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
   }
 
   final List<String> _banners = const [
-    'assets/agarbatti.png',
+    'assets/01_electric.png',
 
-    'assets/electric.png',
-
-    'assets/tracon_slider.png',
+    'assets/02_tracon_slider.png',
+    'assets/03_agarbatti.png',
   ];
 
   @override
@@ -740,6 +739,12 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
 
                           title: _text(product['productName']),
 
+                          sellerShopName: _text(product['sellerShopName']),
+
+                          sellerShopAddress: _text(
+                            product['sellerShopAddress'],
+                          ),
+
                           price: _text(product['unitPrice']),
 
                           unit: _text(product['unitTypes']),
@@ -842,6 +847,10 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
     required String imageUrl,
 
     required String title,
+
+    required String sellerShopName,
+
+    required String sellerShopAddress,
 
     required String price,
 
@@ -953,6 +962,46 @@ class _HomeScreenState extends State<HomeScreen> with CatalogState<HomeScreen> {
                         ],
                       ),
                     ),
+
+                    if (sellerShopName.trim().isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        sellerShopName.trim(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ],
+
+                    if (sellerShopAddress.trim().isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            Icons.location_on_outlined,
+                            size: 13,
+                            color: Colors.grey.shade600,
+                          ),
+                          const SizedBox(width: 3),
+                          Expanded(
+                            child: Text(
+                              sellerShopAddress.trim(),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
 
                     const SizedBox(height: 6),
 
