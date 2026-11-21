@@ -1458,9 +1458,10 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
             !_moreProductsScrollController.hasClients) {
           return;
         }
-
         final itemCount = _moreProducts.length;
-        if (itemCount == 0) return;
+
+        // Auto-scroll only when there are more than 7 products.
+        if (itemCount <= 7) return;
 
         final position = _moreProductsScrollController.position;
         if (!position.hasContentDimensions || position.maxScrollExtent <= 0) {
@@ -1516,6 +1517,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
   // Reposition by one identical product cycle near either end. This makes
   // the list feel continuous even when the user manually scrolls a long way.
   void _keepMoreProductsListLooping(ScrollMetrics metrics) {
+    // Manual scrolling is allowed, but looping is disabled for 7 or fewer.
+    if (_moreProducts.length <= 7) return;
+
     if (_moreProductsLoopJumpPending) return;
 
     final cycleHeight = _moreProducts.length * 52.0;
@@ -1584,7 +1588,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
       );
     }
 
-    _scheduleMoreProductsInitialPosition(itemCount);
+    if (itemCount > 7) {
+      _scheduleMoreProductsInitialPosition(itemCount);
+    }
 
     // Repeat the products so scrolling can continue in either direction.
     // ListView.builder creates only the visible rows, not the entire list.
@@ -1601,7 +1607,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen>
             ),
             padding: EdgeInsets.zero,
             itemExtent: itemHeight,
-            itemCount: itemCount * 20,
+            itemCount: itemCount > 7 ? itemCount * 20 : itemCount,
             itemBuilder: (context, index) {
               final product = _moreProducts[index % itemCount];
 
